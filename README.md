@@ -3,7 +3,7 @@ Micro service pour exposer des fonctionnalités de Retrieval d’un Vector Store
 
 ## Endpoints REST
 
-Base path : `/api/v1/retrieval`
+Base path : `/zia-rag/api/v1/retrieval`
 
 | Méthode | Chemin | Description |
 |---------|--------|-------------|
@@ -33,11 +33,15 @@ Base path : `/api/v1/retrieval`
   par identifiant de document avant reranking.
 - `sources` : filtre optionnel sur la métadonnée `source` (vide = pas de filtre).
 
+> **Note** : seuls les documents publics sont retournés. Un document est considéré public
+> lorsque sa métadonnée `user_uuid` est absente ou vide ; les documents rattachés à un
+> utilisateur (`user_uuid` non vide) sont systématiquement exclus du retrieval.
+
 ## Documentation Swagger
 
 L'API est documentée via springdoc-openapi :
-- UI : `/swagger-ui.html`
-- Spécification OpenAPI : `/v3/api-docs`
+- UI : `/zia-rag/swagger-ui.html`
+- Spécification OpenAPI : `/zia-rag/v3/api-docs`
 
 ## Configuration
 
@@ -49,7 +53,4 @@ Variables d'environnement principales (voir `application.yml`) :
 | `PGVECTOR_SCHEMA_NAME`, `PGVECTOR_TABLE_NAME` | Schéma / table du vector store. |
 | `ZIA_EMBEDDING_*` | Modèle d'embedding (base-url, api-key, model, dimensions). |
 | `ZIA_RERANK_BASE_URL`, `ZIA_RERANK_API_KEY`, `ZIA_RERANK_MODEL` | Service de reranking distant. |
-
-> **Note** : le contrat exact de l'API de reranking n'est pas encore figé. Le mapping
-> requête/réponse est isolé dans `RemoteReranker` (voir les `TODO`) et devra être adapté.
 

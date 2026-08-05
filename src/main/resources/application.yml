@@ -1,3 +1,4 @@
+
 spring:
   autoconfigure:
     exclude: org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration, org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration, org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration, org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration, org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
@@ -31,3 +32,6 @@ zia:
       api-key: ${ZIA_RERANK_API_KEY:}
       model: ${ZIA_RERANK_MODEL:}
       truncate-prompt-tokens: ${ZIA_RERANK_TRUNCATE_PROMPT_TOKENS:16384}
+server:
+  servlet:
+    context-path: /zia-rag

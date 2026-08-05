@@ -75,6 +75,7 @@
     </dependencyManagement>
 
     <build>
+        <finalName>zia-rag</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
