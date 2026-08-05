@@ -66,8 +66,12 @@ public class BM25Retriever {
 
         List<Object> args = new ArrayList<>();
 
+        // Only public documents are returned: a document is public when its
+        // 'user_uuid' metadata is empty or absent.
+        sql.append("WHERE (metadata->>'user_uuid' IS NULL OR metadata->>'user_uuid' = '') ");
+
         if (filterBySource) {
-            sql.append("WHERE metadata->>'source' = ANY(?) ");
+            sql.append("AND metadata->>'source' = ANY(?) ");
         }
 
         sql.append("ORDER BY bm25_score ASC LIMIT ?");

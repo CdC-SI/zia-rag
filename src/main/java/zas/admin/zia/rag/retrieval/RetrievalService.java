@@ -74,16 +74,23 @@ public class RetrievalService {
                 .vectorStore(vectorStore)
                 .topK(config.topK());
 
-        if (config.hasSourceFilter()) {
-            builder.filterExpression(buildSourceFilter(config.sources()));
-        }
+        builder.filterExpression(buildFilter(config));
 
         return builder.build().retrieve(Query.builder().text(question).build());
     }
 
-    private Filter.Expression buildSourceFilter(List<String> sources) {
+    private Filter.Expression buildFilter(RetrievalConfig config) {
         FilterExpressionBuilder b = new FilterExpressionBuilder();
-        return b.in("source", sources.toArray()).build();
+
+        // Only public documents are returned: a document is public when its
+        // 'user_uuid' metadata is empty or absent.
+        FilterExpressionBuilder.Op publicOnly = b.eq("user_uuid", "");
+
+        if (config.hasSourceFilter()) {
+            return b.and(publicOnly, b.in("source", config.sources().toArray())).build();
+        }
+
+        return publicOnly.build();
     }
 
     private List<Document> unionDeduplicate(List<Document> first, List<Document> second) {
