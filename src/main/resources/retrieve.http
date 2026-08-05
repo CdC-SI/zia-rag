@@ -1,0 +1,22 @@
+### Retrieve documents
+POST http://localhost:8080/api/v1/retrieval/documents
+Content-Type: application/json
+
+{
+  "question": "What is the capital of France?",
+  "config": {
+    "topK": 2,
+    "useBm25": true,
+    "useReranker": true
+  }
+}
+
+
+### Embeddings
+POST  https://embedding-inference-model-serving.apps.openshift-ai.mgnt.zas.admin.ch/embeddings
+Content-Type: application/json
+
+{
+  "model": "embedding-inference",
+  "input": "The quick brown fox jumps over the lazy dog"
+}
