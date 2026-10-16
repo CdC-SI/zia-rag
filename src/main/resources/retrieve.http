@@ -1,5 +1,5 @@
 ### Retrieve documents
-POST http://localhost:8080/api/v1/retrieval/documents
+POST http://localhost:8080/zia-rag/api/v1/retrieval/documents
 Content-Type: application/json
 
 {

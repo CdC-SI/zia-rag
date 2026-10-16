@@ -53,4 +53,20 @@ Variables d'environnement principales (voir `application.yml`) :
 | `PGVECTOR_SCHEMA_NAME`, `PGVECTOR_TABLE_NAME` | Schéma / table du vector store. |
 | `ZIA_EMBEDDING_*` | Modèle d'embedding (base-url, api-key, model, dimensions). |
 | `ZIA_RERANK_BASE_URL`, `ZIA_RERANK_API_KEY`, `ZIA_RERANK_MODEL` | Service de reranking distant. |
+| `GATEWAY_PUBLIC_KEY` | Clé publique (Base64) de la gateway pour valider le jeton bleu (profil `internal`). |
+| `ZIA_LOGGING_CALLER_ENABLED` | Active le log de l'appelant (username + authorities) pour chaque requête (défaut : `false`). |
+
+## Sécurité
+
+Spring Security est toujours présent. La validation du jeton bleu (header `Blue`) est fournie par
+la librairie interne `zas-common-security-starter`, ajoutée uniquement via le profil Maven `internal`
+(utilisé par le Jenkinsfile, non disponible sur GitHub) :
+
+```bash
+mvn clean verify -Pinternal
+```
+
+- Avec le profil `internal` : un jeton bleu valide est requis, sauf pour `/actuator/**`,
+  `/swagger-ui.html`, `/swagger-ui/**` et `/v3/api-docs/**`.
+- Sans le profil : toutes les requêtes sont autorisées (développement local, CI GitHub).
 

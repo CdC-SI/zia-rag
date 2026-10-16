@@ -32,6 +32,14 @@ zia:
       api-key: ${ZIA_RERANK_API_KEY:}
       model: ${ZIA_RERANK_MODEL:}
       truncate-prompt-tokens: ${ZIA_RERANK_TRUNCATE_PROMPT_TOKENS:16384}
+  logging:
+    caller:
+      enabled: ${ZIA_LOGGING_CALLER_ENABLED:false}
+zas:
+  security:
+    blue-token:
+      public-key: ${GATEWAY_PUBLIC_KEY}
+      header-name: Blue
 server:
   servlet:
     context-path: /zia-rag

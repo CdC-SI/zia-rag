@@ -25,6 +25,14 @@
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
@@ -60,7 +68,25 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>internal</id>
+            <dependencies>
+                <dependency>
+                    <groupId>ch.admin.zas.commons</groupId>
+                    <artifactId>zas-common-security-starter</artifactId>
+                    <version>4.0.0</version>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 
     <dependencyManagement>
         <dependencies>
