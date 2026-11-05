@@ -7,11 +7,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import zas.admin.zia.rag.config.properties.RerankProperties;
+import zas.admin.zia.rag.config.properties.RetrievalProperties;
 import zas.admin.zia.rag.rerank.RemoteReranker;
 import zas.admin.zia.rag.rerank.Reranker;
 
 @Configuration
-@EnableConfigurationProperties(RerankProperties.class)
+@EnableConfigurationProperties({RerankProperties.class, RetrievalProperties.class})
 public class RetrievalConfig {
 
     @Bean

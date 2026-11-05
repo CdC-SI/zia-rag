@@ -1,7 +1,5 @@
 package zas.admin.zia.rag.retrieval;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
@@ -18,79 +16,83 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Orchestrates document retrieval from the vector store and, optionally, the BM25 full-text search,
+ * Orchestrates document retrieval from the vector store and/or the BM25 full-text search,
  * combining and reranking the results according to the requested {@link RetrievalConfig}.
  */
 @Service
 public class RetrievalService {
 
-    private static final Logger LOG = LoggerFactory.getLogger(RetrievalService.class);
-
     private final VectorStore vectorStore;
+    private final PgVectorJdbcRetriever pgVectorJdbcRetriever;
     private final BM25Retriever bm25Retriever;
     private final Reranker reranker;
+    private final SearchFilterResolver searchFilterResolver;
 
-    public RetrievalService(VectorStore vectorStore, BM25Retriever bm25Retriever, Reranker reranker) {
+    public RetrievalService(VectorStore vectorStore,
+                            PgVectorJdbcRetriever pgVectorJdbcRetriever,
+                            BM25Retriever bm25Retriever,
+                            Reranker reranker,
+                            SearchFilterResolver searchFilterResolver) {
         this.vectorStore = vectorStore;
+        this.pgVectorJdbcRetriever = pgVectorJdbcRetriever;
         this.bm25Retriever = bm25Retriever;
         this.reranker = reranker;
+        this.searchFilterResolver = searchFilterResolver;
     }
 
     /**
      * Retrieves the most relevant documents for the given question and configuration.
+     *
+     * @throws InvalidSearchFilterException when the requested filters are invalid
      */
     public List<Document> retrieve(String question, RetrievalConfig config) {
-        RetrievalConfig effectiveConfig = normalize(config);
+        RetrievalConfig effectiveConfig = config == null ? RetrievalConfig.defaults() : config;
+        SearchFilter filter = searchFilterResolver.resolve(effectiveConfig);
         int topK = effectiveConfig.topK();
 
-        List<Document> vectorDocuments = retrieveFromVectorStore(question, effectiveConfig);
-
-        if (Boolean.FALSE.equals(effectiveConfig.useBm25())) {
-            if (Boolean.TRUE.equals(effectiveConfig.useReranker())) {
-                return reranker.rerank(question, vectorDocuments, topK);
+        return switch (effectiveConfig.searchMode()) {
+            case VECTOR -> rerankOrTruncate(question, retrieveFromVectorStore(question, filter, topK),
+                    topK, effectiveConfig.useReranker());
+            case BM25 -> rerankOrTruncate(question, bm25Retriever.retrieve(question, filter, topK),
+                    topK, effectiveConfig.useReranker());
+            case HYBRID -> {
+                List<Document> combined = unionDeduplicate(
+                        retrieveFromVectorStore(question, filter, topK),
+                        bm25Retriever.retrieve(question, filter, topK));
+                // Vector and BM25 scores are not comparable, so reranking is mandatory here.
+                yield reranker.rerank(question, combined, topK);
             }
-            return truncate(vectorDocuments, topK);
-        }
-
-        List<Document> bm25Documents = bm25Retriever.retrieve(question, effectiveConfig.sources(), topK);
-        List<Document> combined = unionDeduplicate(vectorDocuments, bm25Documents);
-
-        // Vector and BM25 scores are not comparable, so reranking is mandatory here.
-        return reranker.rerank(question, combined, topK);
+        };
     }
 
-    private RetrievalConfig normalize(RetrievalConfig config) {
-        RetrievalConfig base = config == null ? RetrievalConfig.defaults() : config;
-        boolean forceReranker = base.useReranker() || base.useBm25();
-        if (forceReranker == base.useReranker()) {
-            return base;
-        }
-        LOG.debug("Forcing reranker because BM25 is combined with the vector search");
-        return new RetrievalConfig(base.topK(), true, true, base.sources());
+    private List<Document> rerankOrTruncate(String question, List<Document> documents, int topK, boolean rerank) {
+        return rerank ? reranker.rerank(question, documents, topK) : truncate(documents, topK);
     }
 
-    private List<Document> retrieveFromVectorStore(String question, RetrievalConfig config) {
-        VectorStoreDocumentRetriever.Builder builder = VectorStoreDocumentRetriever.builder()
+    private List<Document> retrieveFromVectorStore(String question, SearchFilter filter, int topK) {
+        // Spring AI filter expressions cannot express a substring match on the content.
+        if (filter.hasContentFilter()) {
+            return pgVectorJdbcRetriever.retrieve(question, filter, topK);
+        }
+        return VectorStoreDocumentRetriever.builder()
                 .vectorStore(vectorStore)
-                .topK(config.topK());
-
-        builder.filterExpression(buildFilter(config));
-
-        return builder.build().retrieve(Query.builder().text(question).build());
+                .topK(topK)
+                .filterExpression(buildFilter(filter))
+                .build()
+                .retrieve(Query.builder().text(question).build());
     }
 
-    private Filter.Expression buildFilter(RetrievalConfig config) {
+    static Filter.Expression buildFilter(SearchFilter filter) {
         FilterExpressionBuilder b = new FilterExpressionBuilder();
 
         // Only public documents are returned: a document is public when its
         // 'user_uuid' metadata is empty or absent.
-        FilterExpressionBuilder.Op publicOnly = b.eq("user_uuid", "");
+        FilterExpressionBuilder.Op expression = b.eq("user_uuid", "");
 
-        if (config.hasSourceFilter()) {
-            return b.and(publicOnly, b.in("source", config.sources().toArray())).build();
+        for (Map.Entry<String, List<String>> entry : filter.metadata().entrySet()) {
+            expression = b.and(expression, b.in(entry.getKey(), entry.getValue().toArray()));
         }
-
-        return publicOnly.build();
+        return expression.build();
     }
 
     private List<Document> unionDeduplicate(List<Document> first, List<Document> second) {

@@ -22,6 +22,7 @@ import java.security.Signature;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -34,11 +35,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "zas.security.blue-token.header-name=Blue",
-        "management.health.db.enabled=false"
+        "management.health.db.enabled=false",
+        "zia.security.retriever-groups=" + InternalSecurityIntegrationTest.RETRIEVER_GROUP
 })
 @AutoConfigureMockMvc
 @EnabledIf("zasSecurityLibraryPresent")
 class InternalSecurityIntegrationTest {
+
+    static final String RETRIEVER_GROUP =
+            "cn=RETRIEVER,ou=DEV,ou=MyApp,ou=Applications,ou=Groups,dc=example,dc=org";
+    private static final String OTHER_GROUP =
+            "cn=READER,ou=DEV,ou=MyApp,ou=Applications,ou=Groups,dc=example,dc=org";
 
     private static final String SOURCES_URL = "/api/v1/retrieval/sources";
     private static final String BLUE_HEADER = "Blue";
@@ -88,7 +95,7 @@ class InternalSecurityIntegrationTest {
 
     @Test
     void apiCallWithTokenSignedByUnknownKey_isUnauthorized() throws Exception {
-        String token = blueToken(FOREIGN_KEYS.getPrivate(), Instant.now().plusSeconds(300));
+        String token = blueToken(FOREIGN_KEYS.getPrivate(), List.of(RETRIEVER_GROUP), Instant.now().plusSeconds(300));
 
         mockMvc.perform(get(SOURCES_URL).header(BLUE_HEADER, "Bearer " + token))
                 .andExpect(status().isUnauthorized());
@@ -98,7 +105,7 @@ class InternalSecurityIntegrationTest {
 
     @Test
     void apiCallWithExpiredToken_isUnauthorized() throws Exception {
-        String token = blueToken(GATEWAY_KEYS.getPrivate(), Instant.now().minusSeconds(60));
+        String token = blueToken(GATEWAY_KEYS.getPrivate(), List.of(RETRIEVER_GROUP), Instant.now().minusSeconds(60));
 
         mockMvc.perform(get(SOURCES_URL).header(BLUE_HEADER, "Bearer " + token))
                 .andExpect(status().isUnauthorized());
@@ -107,17 +114,41 @@ class InternalSecurityIntegrationTest {
     }
 
     @Test
-    void apiCallWithValidToken_isAllowed() throws Exception {
+    void apiCallWithTokenWithoutRoles_isForbidden() throws Exception {
+        String token = blueToken(GATEWAY_KEYS.getPrivate(), List.of(), Instant.now().plusSeconds(300));
+
+        mockMvc.perform(get(SOURCES_URL).header(BLUE_HEADER, "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(sourceService);
+    }
+
+    @Test
+    void apiCallWithoutRetrieverGroup_isForbidden() throws Exception {
+        String token = blueToken(GATEWAY_KEYS.getPrivate(), List.of(OTHER_GROUP), Instant.now().plusSeconds(300));
+
+        mockMvc.perform(get(SOURCES_URL).header(BLUE_HEADER, "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(sourceService);
+    }
+
+    @Test
+    void apiCallWithRetrieverGroup_isAllowed() throws Exception {
         when(sourceService.listSources()).thenReturn(List.of("faq"));
-        String token = blueToken(GATEWAY_KEYS.getPrivate(), Instant.now().plusSeconds(300));
+        String token = blueToken(GATEWAY_KEYS.getPrivate(), List.of(OTHER_GROUP, RETRIEVER_GROUP),
+                Instant.now().plusSeconds(300));
 
         mockMvc.perform(get(SOURCES_URL).header(BLUE_HEADER, "Bearer " + token))
                 .andExpect(status().isOk());
     }
 
-    private static String blueToken(PrivateKey signingKey, Instant expiration) throws GeneralSecurityException {
+    private static String blueToken(PrivateKey signingKey, List<String> roles, Instant expiration)
+            throws GeneralSecurityException {
+        String rolesJson = roles.stream().map(role -> "\"" + role + "\"").collect(Collectors.joining(",", "[", "]"));
         String subject = """
-                {"userUID":"test-user","visa":"TST","firstname":"Test","lastname":"User","roles":["cn=USER,dc=example,dc=org"]}""";
+                {"userUID":"test-user","visa":"TST","firstname":"Test","lastname":"User","roles":%s}"""
+                .formatted(rolesJson);
         String header = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
         String payload = "{\"sub\":\"%s\",\"exp\":%d}"
                 .formatted(subject.replace("\"", "\\\""), expiration.getEpochSecond());

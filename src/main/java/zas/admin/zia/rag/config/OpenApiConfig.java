@@ -10,6 +10,6 @@ import org.springframework.context.annotation.Configuration;
                 title = "ZIA RAG Retrieval API",
                 version = "v1",
                 description = "REST endpoints to retrieve relevant documents from a vector store, "
-                        + "with optional BM25 full-text search, reranking and source filtering."))
+                        + "with vector, BM25 or hybrid search, reranking, metadata and content filtering."))
 public class OpenApiConfig {
 }
