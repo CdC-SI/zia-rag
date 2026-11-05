@@ -6,8 +6,22 @@ Content-Type: application/json
   "question": "What is the capital of France?",
   "config": {
     "topK": 2,
-    "useBm25": true,
+    "searchMode": "HYBRID",
     "useReranker": true
+  }
+}
+
+### Retrieve documents (BM25 only, filtered)
+POST http://localhost:8080/zia-rag/api/v1/retrieval/documents
+Content-Type: application/json
+
+{
+  "question": "What is the capital of France?",
+  "config": {
+    "topK": 5,
+    "searchMode": "BM25",
+    "metadataFilters": { "source": ["faq"] },
+    "contentContains": "Paris"
   }
 }
 
@@ -20,3 +34,7 @@ Content-Type: application/json
   "model": "embedding-inference",
   "input": "The quick brown fox jumps over the lazy dog"
 }
+
+###
+GET https://gateway-d.zas.admin.ch/zia-rag/api/v1/retrieval/sources
+Blue: Bearer {{blueToken}}
