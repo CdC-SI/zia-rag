@@ -20,4 +20,8 @@ public record SearchFilter(Map<String, List<String>> metadata, String contentCon
     public boolean hasContentFilter() {
         return contentContains != null;
     }
+
+    public boolean isEmpty() {
+        return metadata.isEmpty() && !hasContentFilter();
+    }
 }

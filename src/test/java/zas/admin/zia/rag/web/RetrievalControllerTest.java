@@ -20,6 +20,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -118,6 +119,36 @@ class RetrievalControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(retrievalService);
+    }
+
+    @Test
+    void retrieveDocuments_missingQuestionOutsideFilterMode_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/retrieval/documents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "config": { "searchMode": "VECTOR", "metadataFilters": { "lang": ["fr"] } } }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(retrievalService);
+    }
+
+    @Test
+    void retrieveDocuments_filterModeWithoutQuestion_returnsDocuments() throws Exception {
+        when(retrievalService.retrieve(any(), any()))
+                .thenReturn(List.of(Document.builder().id("d1").text("body").build()));
+
+        mockMvc.perform(post("/api/v1/retrieval/documents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "config": { "searchMode": "FILTER", "metadataFilters": { "file_name": ["f1"] } } }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("d1"));
+
+        ArgumentCaptor<RetrievalConfig> captor = ArgumentCaptor.forClass(RetrievalConfig.class);
+        verify(retrievalService).retrieve(isNull(), captor.capture());
+        assertThat(captor.getValue().searchMode()).isEqualTo(SearchMode.FILTER);
     }
 
     @Test

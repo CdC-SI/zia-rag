@@ -25,7 +25,9 @@ public record RetrievalConfig(
 
         @Schema(
                 description = "Search strategy. VECTOR: vector similarity search only. BM25: full-text "
-                        + "BM25 search only. HYBRID: both, unioned, deduplicated and reranked. "
+                        + "BM25 search only. HYBRID: both, unioned, deduplicated and reranked. FILTER: plain "
+                        + "SQL query on metadataFilters/contentContains (at least one required), no "
+                        + "embedding, question and useReranker ignored, ordered by id. "
                         + "Defaults to HYBRID when the deprecated 'useBm25' is true, VECTOR otherwise.",
                 defaultValue = "VECTOR")
         SearchMode searchMode,

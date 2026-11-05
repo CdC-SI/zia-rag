@@ -30,9 +30,10 @@ class RetrievalServiceTest {
     private final VectorStore vectorStore = mock(VectorStore.class);
     private final PgVectorJdbcRetriever pgVectorJdbcRetriever = mock(PgVectorJdbcRetriever.class);
     private final BM25Retriever bm25Retriever = mock(BM25Retriever.class);
+    private final FilterRetriever filterRetriever = mock(FilterRetriever.class);
     private final Reranker reranker = mock(Reranker.class);
     private final RetrievalService service = new RetrievalService(vectorStore, pgVectorJdbcRetriever,
-            bm25Retriever, reranker, new SearchFilterResolver(new RetrievalProperties(null)));
+            bm25Retriever, filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null)));
 
     private static Document doc(String id) {
         return Document.builder().id(id).text("content-" + id).build();
@@ -181,5 +182,48 @@ class RetrievalServiceTest {
                 .isInstanceOf(InvalidSearchFilterException.class)
                 .hasMessageContaining("user_uuid");
         verifyNoInteractions(vectorStore, bm25Retriever, pgVectorJdbcRetriever, reranker);
+    }
+
+    @Test
+    void filterMode_issuesPlainSqlQueryWithoutQuestionNorReranker() {
+        when(filterRetriever.retrieve(any(), eq(7))).thenReturn(List.of(doc("a")));
+
+        List<Document> result = service.retrieve(null, new RetrievalConfig(7, true, SearchMode.FILTER,
+                Map.of("file_name", List.of("318_104_01_f")), null, null, null));
+
+        assertThat(result).extracting(Document::getId).containsExactly("a");
+        ArgumentCaptor<SearchFilter> filter = ArgumentCaptor.forClass(SearchFilter.class);
+        verify(filterRetriever).retrieve(filter.capture(), eq(7));
+        assertThat(filter.getValue().metadata()).containsEntry("file_name", List.of("318_104_01_f"));
+        verifyNoInteractions(vectorStore, bm25Retriever, pgVectorJdbcRetriever, reranker);
+    }
+
+    @Test
+    void filterMode_acceptsContentFilterOnly() {
+        when(filterRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
+
+        service.retrieve("  ", new RetrievalConfig(3, false, SearchMode.FILTER, null, "mot de passe", null, null));
+
+        verify(filterRetriever).retrieve(any(), eq(3));
+    }
+
+    @Test
+    void filterMode_withoutAnyFilter_isRejected() {
+        RetrievalConfig config = config(3, false, SearchMode.FILTER);
+
+        assertThatThrownBy(() -> service.retrieve(null, config))
+                .isInstanceOf(InvalidSearchFilterException.class)
+                .hasMessageContaining("FILTER");
+        verifyNoInteractions(filterRetriever, vectorStore, bm25Retriever, pgVectorJdbcRetriever, reranker);
+    }
+
+    @Test
+    void blankQuestion_outsideFilterMode_isRejected() {
+        for (SearchMode mode : List.of(SearchMode.VECTOR, SearchMode.BM25, SearchMode.HYBRID)) {
+            assertThatThrownBy(() -> service.retrieve(" ", config(3, false, mode)))
+                    .isInstanceOf(InvalidSearchFilterException.class)
+                    .hasMessageContaining("question");
+        }
+        verifyNoInteractions(filterRetriever, vectorStore, bm25Retriever, pgVectorJdbcRetriever, reranker);
     }
 }

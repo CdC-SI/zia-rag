@@ -7,7 +7,7 @@ Base path : `/zia-rag/api/v1/retrieval`
 
 | Méthode | Chemin | Description |
 |---------|--------|-------------|
-| `POST`  | `/documents` | Retourne les `Document` (objets Spring AI) les plus pertinents pour une question. |
+| `POST`  | `/documents` | Retourne les `Document` (objets Spring AI) les plus pertinents pour une question, ou correspondant à des filtres (mode `FILTER`). |
 | `GET`   | `/sources`   | Liste les valeurs distinctes de la métadonnée `source`. |
 
 ### Corps de la requête `POST /documents`
@@ -28,6 +28,8 @@ Base path : `/zia-rag/api/v1/retrieval`
 }
 ```
 
+- `question` : question en langage naturel. Obligatoire pour `VECTOR`, `BM25` et `HYBRID`
+  (sinon `400`) ; optionnelle et ignorée en mode `FILTER`.
 - `topK` : nombre maximum de documents retournés (défaut : 10).
 - `searchMode` : stratégie de recherche (défaut : `VECTOR`).
   - `VECTOR` : recherche vectorielle seule.
@@ -35,6 +37,9 @@ Base path : `/zia-rag/api/v1/retrieval`
     index `idx_vector_store_content_bm25`).
   - `HYBRID` : les deux recherches, unies puis dédupliquées par identifiant de document.
     Comme leurs scores ne sont pas comparables, le reranker est **forcé**.
+  - `FILTER` : simple requête SQL sur `metadataFilters` et/ou `contentContains`, sans embedding
+    ni reranking (`question` et `useReranker` ignorés). Au moins un filtre est requis (sinon `400`).
+    Les résultats sont triés par identifiant, limités à `topK`, sans score.
 - `useReranker` : active le reranking distant (`VECTOR` et `BM25`).
 - `metadataFilters` : filtres optionnels `clé → valeurs acceptées`. Un document est retenu si,
   pour **chaque** clé, sa métadonnée vaut **une** des valeurs (IN par clé, AND entre clés).
@@ -47,6 +52,18 @@ Base path : `/zia-rag/api/v1/retrieval`
 - Dépréciés (toujours supportés) :
   - `useBm25: true` ⇒ `searchMode: HYBRID` si `searchMode` est absent.
   - `sources` ⇒ fusionné dans `metadataFilters.source`.
+
+Exemple en mode `FILTER` (tous les chunks d'un document, sans question) :
+
+```json
+{
+  "config": {
+    "topK": 50,
+    "searchMode": "FILTER",
+    "metadataFilters": { "file_name": ["318_104_01_f_DR_01.01.2026"] }
+  }
+}
+```
 
 > **Note** : seuls les documents publics sont retournés. Un document est considéré public
 > lorsque sa métadonnée `user_uuid` est absente ou vide ; les documents rattachés à un
