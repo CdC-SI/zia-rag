@@ -1,0 +1,51 @@
+### Retrieve documents
+POST {{url}}/zia-rag/api/v1/retrieval/documents
+Content-Type: application/json
+
+{
+  "question": "What is the capital of France?",
+  "config": {
+    "topK": 2,
+    "searchMode": "HYBRID",
+    "useReranker": true
+  }
+}
+
+### Retrieve documents (BM25 only, filtered)
+POST {{url}}/zia-rag/api/v1/retrieval/documents
+Blue: {{blueToken}}
+Content-Type: application/json
+
+{
+  "question": "What is the capital of France?",
+  "config": {
+    "topK": 5,
+    "searchMode": "VECTOR",
+    "useReranker": true,
+    "contentContains": "",
+    "metadataFilters": {
+      "source": ["acor"],
+      "file_name" : ["318_104_01_f_DR_01.01.2026"]
+    }
+  }
+}
+
+
+### Retrieve documents (FILTER mode, no question, no embedding)
+POST {{url}}/zia-rag/api/v1/retrieval/documents
+Blue: {{blueToken}}
+Content-Type: application/json
+
+{
+  "config": {
+    "topK": 50,
+    "searchMode": "FILTER",
+    "metadataFilters": {
+      "file_name" : ["318_104_01_f_DR_01.01.2026"]
+    }
+  }
+}
+
+###
+GET {{url}}/zia-rag/api/v1/retrieval/sources
+Blue: {{blueToken}}
