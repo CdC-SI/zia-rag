@@ -30,6 +30,9 @@ Base path : `/zia-rag/api/v1/retrieval`
 
 - `question` : question en langage naturel. Obligatoire pour `VECTOR`, `BM25` et `HYBRID`
   (sinon `400`) ; optionnelle et ignorée en mode `FILTER`.
+- `userId` (optionnel, racine de la requête) : `users.uuid` de l'utilisateur final ; ses documents
+  privés sont recherchés en plus des documents publics (voir la note plus bas). Caractères
+  autorisés : `[A-Za-z0-9._@-]`, 255 au plus (sinon `400`).
 - `topK` : nombre maximum de documents retournés (défaut : 10).
 - `searchMode` : stratégie de recherche (défaut : `VECTOR`).
   - `VECTOR` : recherche vectorielle seule.
@@ -65,9 +68,15 @@ Exemple en mode `FILTER` (tous les chunks d'un document, sans question) :
 }
 ```
 
-> **Note** : seuls les documents publics sont retournés. Un document est considéré public
-> lorsque sa métadonnée `user_uuid` est absente ou vide ; les documents rattachés à un
-> utilisateur (`user_uuid` non vide) sont systématiquement exclus du retrieval.
+> **Note** : par défaut, seuls les documents publics sont retournés. Un document est considéré public
+> lorsque sa métadonnée `user_uuid` est absente ou vide. Si `userId` est fourni, les documents
+> privés de cet utilisateur (`user_uuid` = `userId`) sont recherchés **en plus** des documents
+> publics ; les documents des autres utilisateurs restent toujours exclus. `user_uuid` reste interdit
+> dans `metadataFilters` : on ne peut pas restreindre la recherche aux seuls documents privés.
+>
+> `userId` est **déclaratif** : tout appelant autorisé (`zia.security.retriever-groups`) qui connaît
+> l'uuid d'un utilisateur peut lire ses documents privés. Ce champ est réservé au backend ZIA, qui le
+> renseigne avec `users.uuid` de l'utilisateur authentifié.
 
 ## Documentation Swagger
 

@@ -160,6 +160,42 @@ class RetrievalServiceTest {
     }
 
     @Test
+    void userId_widensVisibilityToPrivateDocumentsInEveryRetriever() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(bm25Retriever.retrieve(any(), any(), anyInt())).thenReturn(List.of());
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of());
+
+        service.retrieve("q", config(5, false, SearchMode.HYBRID), "u-1");
+
+        ArgumentCaptor<SearchRequest> request = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vectorStore).similaritySearch(request.capture());
+        Filter.Expression expression = request.getValue().getFilterExpression();
+        assertThat(expression.type()).isEqualTo(Filter.ExpressionType.IN);
+        assertThat(expression.toString()).contains("user_uuid", "u-1");
+
+        ArgumentCaptor<SearchFilter> filter = ArgumentCaptor.forClass(SearchFilter.class);
+        verify(bm25Retriever).retrieve(eq("q"), filter.capture(), eq(5));
+        assertThat(filter.getValue().userId()).isEqualTo("u-1");
+    }
+
+    @Test
+    void withoutUserId_onlyPublicDocumentsAreVisible() {
+        Filter.Expression expression = RetrievalService.buildFilter(SearchFilter.NONE);
+
+        assertThat(expression.type()).isEqualTo(Filter.ExpressionType.EQ);
+        assertThat(expression.toString()).contains("user_uuid");
+    }
+
+    @Test
+    void userId_doesNotSatisfyFilterModeRequirement() {
+        RetrievalConfig config = config(3, false, SearchMode.FILTER);
+
+        assertThatThrownBy(() -> service.retrieve(null, config, "u-1"))
+                .isInstanceOf(InvalidSearchFilterException.class);
+        verifyNoInteractions(filterRetriever);
+    }
+
+    @Test
     void contentFilter_usesJdbcVectorRetrieverInsteadOfVectorStore() {
         when(pgVectorJdbcRetriever.retrieve(eq("q"), any(), eq(4))).thenReturn(List.of(doc("a")));
 

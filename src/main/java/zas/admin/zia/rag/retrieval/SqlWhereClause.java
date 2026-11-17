@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * SQL {@code WHERE} clause shared by the JDBC retrievers: public documents only, metadata filters and
- * content filter. Every client value (metadata keys included) is bound as a parameter.
+ * SQL {@code WHERE} clause shared by the JDBC retrievers: visible documents (public, plus the private
+ * documents of {@link SearchFilter#userId()} when set), metadata filters and content filter. Every client value (metadata keys included) is bound as a parameter.
  */
 final class SqlWhereClause {
 
@@ -29,9 +29,16 @@ final class SqlWhereClause {
         StringBuilder sql = new StringBuilder();
         List<Binder> binders = new ArrayList<>();
 
-        // Only public documents are returned: a document is public when its
-        // 'user_uuid' metadata is empty or absent.
-        sql.append("WHERE (metadata->>'user_uuid' IS NULL OR metadata->>'user_uuid' = '') ");
+        // Public documents ('user_uuid' metadata empty or absent), plus the private documents of the
+        // requesting user when one is given.
+        if (filter.hasUserId()) {
+            String userId = filter.userId();
+            sql.append("WHERE (metadata->>'user_uuid' IS NULL OR metadata->>'user_uuid' = '' "
+                    + "OR metadata->>'user_uuid' = ?) ");
+            binders.add((c, ps, i) -> ps.setString(i, userId));
+        } else {
+            sql.append("WHERE (metadata->>'user_uuid' IS NULL OR metadata->>'user_uuid' = '') ");
+        }
 
         for (Map.Entry<String, List<String>> entry : filter.metadata().entrySet()) {
             String key = entry.getKey();

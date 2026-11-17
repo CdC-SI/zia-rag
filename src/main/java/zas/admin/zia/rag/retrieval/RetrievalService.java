@@ -54,8 +54,18 @@ public class RetrievalService {
      * @throws InvalidSearchFilterException when the requested filters or question are invalid
      */
     public List<Document> retrieve(String question, RetrievalConfig config) {
+        return retrieve(question, config, null);
+    }
+
+    /**
+     * Same as {@link #retrieve(String, RetrievalConfig)}, the private documents of {@code userId} being
+     * visible on top of the public ones.
+     *
+     * @param userId user ({@code users.uuid}) whose private documents are also visible, or {@code null}
+     */
+    public List<Document> retrieve(String question, RetrievalConfig config, String userId) {
         RetrievalConfig effectiveConfig = config == null ? RetrievalConfig.defaults() : config;
-        SearchFilter filter = searchFilterResolver.resolve(effectiveConfig);
+        SearchFilter filter = searchFilterResolver.resolve(effectiveConfig, userId);
         int topK = effectiveConfig.topK();
         SearchMode mode = effectiveConfig.searchMode();
 
@@ -105,9 +115,11 @@ public class RetrievalService {
     static Filter.Expression buildFilter(SearchFilter filter) {
         FilterExpressionBuilder b = new FilterExpressionBuilder();
 
-        // Only public documents are returned: a document is public when its
-        // 'user_uuid' metadata is empty or absent.
-        FilterExpressionBuilder.Op expression = b.eq("user_uuid", "");
+        // Public documents ('user_uuid' metadata empty), plus the private documents of the requesting
+        // user when one is given.
+        FilterExpressionBuilder.Op expression = filter.hasUserId()
+                ? b.in(SearchFilter.USER_UUID_KEY, "", filter.userId())
+                : b.eq(SearchFilter.USER_UUID_KEY, "");
 
         for (Map.Entry<String, List<String>> entry : filter.metadata().entrySet()) {
             expression = b.and(expression, b.in(entry.getKey(), entry.getValue().toArray()));

@@ -55,7 +55,7 @@ public class RetrievalController {
     @ApiResponse(responseCode = "403", description = "The caller is not member of an allowed group.")
     @PostMapping(value = "/documents", consumes = MediaType.APPLICATION_JSON_VALUE)
     public List<Document> retrieveDocuments(@Valid @RequestBody RetrievalRequest request) {
-        return retrievalService.retrieve(request.question(), request.config());
+        return retrievalService.retrieve(request.question(), request.config(), request.userId());
     }
 
     @Operation(
