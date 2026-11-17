@@ -59,7 +59,21 @@ public record RetrievalConfig(
                 example = "[\"handbook\", \"faq\"]",
                 deprecated = true)
         @Deprecated
-        List<String> sources
+        List<String> sources,
+
+        @Schema(
+                description = "Optional minimum reranker relevance score: reranked documents scoring below are "
+                        + "dropped. Overrides zia.rag.retrieval.min-rerank-score. Ignored when the reranker is "
+                        + "not used or unavailable.",
+                example = "0.3")
+        Double minRerankScore,
+
+        @Schema(
+                description = "Optional minimum BM25 relevance score (BM25 and HYBRID modes): BM25 results "
+                        + "scoring below are dropped before reranking. Overrides "
+                        + "zia.rag.retrieval.min-bm25-score.",
+                example = "1.5")
+        Double minBm25Score
 ) {
 
     public static final int DEFAULT_TOP_K = 10;
@@ -86,6 +100,6 @@ public record RetrievalConfig(
     }
 
     public static RetrievalConfig defaults() {
-        return new RetrievalConfig(null, null, null, null, null, null, null);
+        return new RetrievalConfig(null, null, null, null, null, null, null, null, null);
     }
 }

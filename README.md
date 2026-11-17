@@ -43,7 +43,13 @@ Base path : `/zia-rag/api/v1/retrieval`
   - `FILTER` : simple requête SQL sur `metadataFilters` et/ou `contentContains`, sans embedding
     ni reranking (`question` et `useReranker` ignorés). Au moins un filtre est requis (sinon `400`).
     Les résultats sont triés par identifiant, limités à `topK`, sans score.
-- `useReranker` : active le reranking distant (`VECTOR` et `BM25`).
+- `useReranker` : active le reranking distant (`VECTOR` et `BM25`). Si le reranker échoue (erreur,
+  timeout, réponse vide), les documents gardent leur ordre initial (en `HYBRID` : résultats vectoriels
+  puis BM25), tronqués à `topK` ; l'échec est journalisé (`WARN`) et la requête aboutit.
+- `minRerankScore` (optionnel) : score reranker minimal ; les documents rerankés en dessous sont
+  écartés. Surcharge `zia.rag.retrieval.min-rerank-score`. Sans effet sans reranking ou en repli.
+- `minBm25Score` (optionnel) : score BM25 minimal (modes `BM25` et `HYBRID`) ; les résultats BM25 en
+  dessous sont écartés avant reranking. Surcharge `zia.rag.retrieval.min-bm25-score`.
 - `metadataFilters` : filtres optionnels `clé → valeurs acceptées`. Un document est retenu si,
   pour **chaque** clé, sa métadonnée vaut **une** des valeurs (IN par clé, AND entre clés).
   Toute clé est acceptée sauf les clés réservées (`zia.rag.retrieval.reserved-metadata-keys`,
@@ -94,6 +100,8 @@ Variables d'environnement principales (voir `application.yml`) :
 | `PGVECTOR_SCHEMA_NAME`, `PGVECTOR_TABLE_NAME` | Schéma / table du vector store. |
 | `ZIA_EMBEDDING_*` | Modèle d'embedding (base-url, api-key, model, dimensions). |
 | `ZIA_RERANK_BASE_URL`, `ZIA_RERANK_API_KEY`, `ZIA_RERANK_MODEL` | Service de reranking distant. |
+| `ZIA_RERANK_CONNECT_TIMEOUT`, `ZIA_RERANK_READ_TIMEOUT` | Timeouts du reranker (défaut : `2s`, `10s`) ; au-delà, repli sur l'ordre initial. |
+| `ZIA_RAG_MIN_RERANK_SCORE`, `ZIA_RAG_MIN_BM25_SCORE` | Seuils par défaut (vide = aucun), surchargeables par requête. |
 | `GATEWAY_PUBLIC_KEY` | Clé publique (Base64) de la gateway pour valider le jeton bleu (profil `internal`). |
 | `ZIA_SECURITY_RETRIEVER_GROUPS` | Groupes RHDS (DN complets, séparés par `;`) autorisés à appeler l'API (profil `internal`). Vide = tout refusé. |
 | `ZIA_RAG_RESERVED_METADATA_KEYS` | Clés de métadonnées non filtrables, séparées par `,` (défaut : `user_uuid`). |

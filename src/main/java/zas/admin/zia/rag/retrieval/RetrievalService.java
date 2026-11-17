@@ -1,5 +1,7 @@
 package zas.admin.zia.rag.retrieval;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
@@ -8,6 +10,7 @@ import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import zas.admin.zia.rag.config.properties.RetrievalProperties;
 import zas.admin.zia.rag.rerank.Reranker;
 import zas.admin.zia.rag.web.dto.RetrievalConfig;
 import zas.admin.zia.rag.web.dto.SearchMode;
@@ -20,9 +23,16 @@ import java.util.Map;
 /**
  * Orchestrates document retrieval from the vector store, the BM25 full-text search and/or a plain
  * SQL filter, combining and reranking the results according to the requested {@link RetrievalConfig}.
+ *
+ * <p>BM25 results below the minimum BM25 score and reranked documents below the minimum reranker score are
+ * dropped (thresholds from the request, else {@link RetrievalProperties}). When the reranker fails, the
+ * documents keep their initial order (vector results first in HYBRID mode), simply truncated to
+ * {@code topK}, and the failure is logged.
  */
 @Service
 public class RetrievalService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RetrievalService.class);
 
     private final VectorStore vectorStore;
     private final PgVectorJdbcRetriever pgVectorJdbcRetriever;
@@ -30,19 +40,22 @@ public class RetrievalService {
     private final FilterRetriever filterRetriever;
     private final Reranker reranker;
     private final SearchFilterResolver searchFilterResolver;
+    private final RetrievalProperties properties;
 
     public RetrievalService(VectorStore vectorStore,
                             PgVectorJdbcRetriever pgVectorJdbcRetriever,
                             BM25Retriever bm25Retriever,
                             FilterRetriever filterRetriever,
                             Reranker reranker,
-                            SearchFilterResolver searchFilterResolver) {
+                            SearchFilterResolver searchFilterResolver,
+                            RetrievalProperties properties) {
         this.vectorStore = vectorStore;
         this.pgVectorJdbcRetriever = pgVectorJdbcRetriever;
         this.bm25Retriever = bm25Retriever;
         this.filterRetriever = filterRetriever;
         this.reranker = reranker;
         this.searchFilterResolver = searchFilterResolver;
+        this.properties = properties;
     }
 
     /**
@@ -68,6 +81,10 @@ public class RetrievalService {
         SearchFilter filter = searchFilterResolver.resolve(effectiveConfig, userId);
         int topK = effectiveConfig.topK();
         SearchMode mode = effectiveConfig.searchMode();
+        Double minRerankScore = effectiveConfig.minRerankScore() != null
+                ? effectiveConfig.minRerankScore() : properties.minRerankScore();
+        Double minBm25Score = effectiveConfig.minBm25Score() != null
+                ? effectiveConfig.minBm25Score() : properties.minBm25Score();
 
         if (mode.requiresQuestion() && !StringUtils.hasText(question)) {
             throw new InvalidSearchFilterException("question must not be blank unless searchMode is FILTER");
@@ -82,21 +99,47 @@ public class RetrievalService {
                 yield filterRetriever.retrieve(filter, topK);
             }
             case VECTOR -> rerankOrTruncate(question, retrieveFromVectorStore(question, filter, topK),
-                    topK, effectiveConfig.useReranker());
-            case BM25 -> rerankOrTruncate(question, bm25Retriever.retrieve(question, filter, topK),
-                    topK, effectiveConfig.useReranker());
+                    topK, effectiveConfig.useReranker(), minRerankScore);
+            case BM25 -> rerankOrTruncate(question, retrieveBm25(question, filter, topK, minBm25Score),
+                    topK, effectiveConfig.useReranker(), minRerankScore);
             case HYBRID -> {
                 List<Document> combined = unionDeduplicate(
                         retrieveFromVectorStore(question, filter, topK),
-                        bm25Retriever.retrieve(question, filter, topK));
+                        retrieveBm25(question, filter, topK, minBm25Score));
                 // Vector and BM25 scores are not comparable, so reranking is mandatory here.
-                yield reranker.rerank(question, combined, topK);
+                yield rerankOrTruncate(question, combined, topK, true, minRerankScore);
             }
         };
     }
 
-    private List<Document> rerankOrTruncate(String question, List<Document> documents, int topK, boolean rerank) {
-        return rerank ? reranker.rerank(question, documents, topK) : truncate(documents, topK);
+    private List<Document> rerankOrTruncate(String question, List<Document> documents, int topK, boolean rerank,
+                                            Double minRerankScore) {
+        if (!rerank) {
+            return truncate(documents, topK);
+        }
+        List<Document> reranked;
+        try {
+            reranked = reranker.rerank(question, documents, topK);
+        } catch (RuntimeException e) {
+            LOG.warn("Reranker unavailable, falling back to the initial order of {} documents: {}",
+                    documents.size(), e.toString());
+            return truncate(documents, topK);
+        }
+        return atLeast(reranked, minRerankScore);
+    }
+
+    private List<Document> retrieveBm25(String question, SearchFilter filter, int topK, Double minBm25Score) {
+        return atLeast(bm25Retriever.retrieve(question, filter, topK), minBm25Score);
+    }
+
+    /** Keeps the documents whose score is at least {@code minScore} (every document when {@code minScore} is null). */
+    static List<Document> atLeast(List<Document> documents, Double minScore) {
+        if (minScore == null) {
+            return documents;
+        }
+        return documents.stream()
+                .filter(document -> document.getScore() != null && document.getScore() >= minScore)
+                .toList();
     }
 
     private List<Document> retrieveFromVectorStore(String question, SearchFilter filter, int topK) {

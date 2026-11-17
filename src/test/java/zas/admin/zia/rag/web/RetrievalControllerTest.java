@@ -69,7 +69,9 @@ class RetrievalControllerTest {
                                   "config": {
                                     "searchMode": "BM25",
                                     "metadataFilters": { "lang": ["fr"] },
-                                    "contentContains": "mot de passe"
+                                    "contentContains": "mot de passe",
+                                    "minRerankScore": 0.3,
+                                    "minBm25Score": 1.5
                                   }
                                 }
                                 """))
@@ -81,6 +83,8 @@ class RetrievalControllerTest {
         assertThat(config.searchMode()).isEqualTo(SearchMode.BM25);
         assertThat(config.metadataFilters()).containsEntry("lang", List.of("fr"));
         assertThat(config.contentContains()).isEqualTo("mot de passe");
+        assertThat(config.minRerankScore()).isEqualTo(0.3);
+        assertThat(config.minBm25Score()).isEqualTo(1.5);
     }
 
     @Test

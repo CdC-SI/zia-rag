@@ -1,6 +1,8 @@
 package zas.admin.zia.rag.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -17,7 +19,9 @@ public class RetrievalConfig {
 
     @Bean
     public RestClient rerankRestClient(RestClient.Builder builder, RerankProperties properties) {
-        RestClient.Builder rerankBuilder = builder.clone();
+        RestClient.Builder rerankBuilder = builder.clone()
+                .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(HttpClientSettings.defaults()
+                        .withTimeouts(properties.connectTimeout(), properties.readTimeout())));
         if (StringUtils.hasText(properties.baseUrl())) {
             rerankBuilder.baseUrl(properties.baseUrl());
         }
