@@ -9,7 +9,7 @@ API REST sous `/zia-rag/api/v1/retrieval` : voir `README.md` (endpoints, modes `
 - **Java 25**, **Spring Boot 4.1.x**, **Spring AI 2.0.x** (pgvector, embeddings OpenAI-compatibles), **Maven**.
 - springdoc-openapi (`/zia-rag/swagger-ui.html`), configuration dans `src/main/resources/application.yml`.
 - Package racine : `zas.admin.zia.rag` — `web/` (controllers + `dto/`), `retrieval/`, `rerank/` (+ `dto/`),
-  `config/` (+ `properties/`), `logging/`.
+  `config/` (+ `properties/`), `logging/`, `observability/` (`X-Correlation-Id`, MDC `correlation`).
 
 ## Build & tests
 

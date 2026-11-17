@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import zas.admin.zia.rag.config.properties.RerankProperties;
 import zas.admin.zia.rag.config.properties.RetrievalProperties;
+import zas.admin.zia.rag.observability.CorrelationIdFilter;
 import zas.admin.zia.rag.rerank.RemoteReranker;
 import zas.admin.zia.rag.rerank.Reranker;
 
@@ -20,6 +21,7 @@ public class RetrievalConfig {
     @Bean
     public RestClient rerankRestClient(RestClient.Builder builder, RerankProperties properties) {
         RestClient.Builder rerankBuilder = builder.clone()
+                .requestInterceptor(CorrelationIdFilter.restClientInterceptor())
                 .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(HttpClientSettings.defaults()
                         .withTimeouts(properties.connectTimeout(), properties.readTimeout())));
         if (StringUtils.hasText(properties.baseUrl())) {

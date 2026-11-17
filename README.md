@@ -84,6 +84,14 @@ Exemple en mode `FILTER` (tous les chunks d'un document, sans question) :
 > l'uuid d'un utilisateur peut lire ses documents privés. Ce champ est réservé au backend ZIA, qui le
 > renseigne avec `users.uuid` de l'utilisateur authentifié.
 
+## Corrélation
+
+Chaque requête porte un identifiant de corrélation : l'en-tête `X-Correlation-Id` reçu est repris
+s'il est valide (`[A-Za-z0-9._:-]`, 128 caractères au plus), sinon un UUID est généré. L'identifiant est
+renvoyé dans l'en-tête de réponse `X-Correlation-Id`, ajouté aux logs (MDC `correlation`, motif
+`logging.pattern.correlation`) et propagé à l'appel du reranker. Le backend ZIA transmet le sien,
+ce qui permet de suivre un tour de conversation de bout en bout.
+
 ## Documentation Swagger
 
 L'API est documentée via springdoc-openapi :

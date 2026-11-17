@@ -49,6 +49,10 @@ zas:
     blue-token:
       public-key: ${GATEWAY_PUBLIC_KEY}
       header-name: Blue
+logging:
+  pattern:
+    # Identifiant X-Correlation-Id de la requête (CorrelationIdFilter, MDC "correlation").
+    correlation: "[%X{correlation:-}] "
 server:
   servlet:
     context-path: /zia-rag
