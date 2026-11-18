@@ -8,7 +8,7 @@ Base path : `/zia-rag/api/v1/retrieval`
 | Méthode | Chemin | Description |
 |---------|--------|-------------|
 | `POST`  | `/documents` | Retourne les `Document` (objets Spring AI) les plus pertinents pour une question, ou correspondant à des filtres (mode `FILTER`). |
-| `GET`   | `/sources`   | Liste les valeurs distinctes de la métadonnée `source`. |
+| `GET`   | `/sources`   | Liste les valeurs distinctes de la métadonnée `source` des documents publics. |
 
 ### Corps de la requête `POST /documents`
 

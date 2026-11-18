@@ -24,7 +24,8 @@ public record RetrievalRequest(
                 description = "Optional identifier (users.uuid) of the end user on whose behalf the search is "
                         + "made. When set, the private documents of this user (metadata 'user_uuid') are "
                         + "searched on top of the public documents; otherwise only public documents are "
-                        + "returned. Declarative: provided by the trusted caller (the ZIA backend).",
+                        + "returned. Declarative: any caller allowed by zia.security.retriever-groups may pass any "
+                        + "uuid; reserved to the trusted ZIA backend, which sends the authenticated user's uuid.",
                 example = "3f2c1b8e-5d4a-4e7b-9c1a-2b3c4d5e6f70",
                 requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         @Pattern(regexp = "[A-Za-z0-9._@-]{1,255}", message = "userId must match [A-Za-z0-9._@-]{1,255}")

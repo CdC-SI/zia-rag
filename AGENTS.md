@@ -15,6 +15,7 @@ API REST sous `/zia-rag/api/v1/retrieval` : voir `README.md` (endpoints, modes `
 
 - Validation de référence : `mvn clean verify` (CI GitHub Actions).
 - Un seul test : `mvn -o test -Dtest=NomDeLaClasseTest`.
+- Tests d'intégration `*IT` (Testcontainers, pgvector) : exécutés par `verify` (failsafe), ignorés sans Docker.
 - Profil Maven `internal` : ajoute `zas-common-security-starter` (validation du jeton bleu + groupes RHDS).
   Utilisé par le `Jenkinsfile` (`mvn -B clean verify -Pinternal`), indisponible sur GitHub.
   Sans ce profil, toutes les requêtes sont autorisées (dev local, CI GitHub).

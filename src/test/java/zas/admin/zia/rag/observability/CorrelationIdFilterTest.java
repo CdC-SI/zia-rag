@@ -3,6 +3,8 @@ package zas.admin.zia.rag.observability;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
+import org.springframework.core.Ordered;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -54,6 +56,14 @@ class CorrelationIdFilterTest {
 
         String replaced = run("bad\nid", seen, new MockHttpServletResponse());
         assertThat(replaced).isNotEqualTo("bad\nid").hasSize(36);
+    }
+
+    @Test
+    void filter_isRegisteredBeforeSpringSecurity() {
+        int order = new ObservabilityConfig().correlationIdFilter().getOrder();
+
+        assertThat(order).isEqualTo(Ordered.HIGHEST_PRECEDENCE)
+                .isLessThan(SecurityFilterProperties.DEFAULT_FILTER_ORDER);
     }
 
     @Test

@@ -6,6 +6,9 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.pgvector.PgVectorFilterExpressionConverter;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClientException;
 import zas.admin.zia.rag.config.properties.RetrievalProperties;
 import zas.admin.zia.rag.rerank.Reranker;
@@ -184,8 +187,34 @@ class RetrievalServiceTest {
     void withoutUserId_onlyPublicDocumentsAreVisible() {
         Filter.Expression expression = RetrievalService.buildFilter(SearchFilter.NONE);
 
-        assertThat(expression.type()).isEqualTo(Filter.ExpressionType.EQ);
-        assertThat(expression.toString()).contains("user_uuid");
+        assertThat(new PgVectorFilterExpressionConverter().convertExpression(expression))
+                .isEqualTo("metadata::jsonb @@ '($.\"user_uuid\" == \"\" || $.\"user_uuid\" == null)'::jsonpath");
+    }
+
+    @Test
+    void withUserId_publicAndOwnPrivateDocumentsAreVisible() {
+        Filter.Expression expression = RetrievalService.buildFilter(
+                new SearchFilter(Map.of("source", List.of("faq")), null, "u-1"));
+
+        assertThat(new PgVectorFilterExpressionConverter().convertExpression(expression))
+                .isEqualTo("metadata::jsonb @@ '($.\"user_uuid\" == \"\" || $.\"user_uuid\" == null "
+                        + "|| $.\"user_uuid\" == \"u-1\") && ($.\"source\" == \"faq\")'::jsonpath");
+    }
+
+    @Test
+    void blankUserId_meansPublicDocumentsOnly() {
+        assertThat(RetrievalService.buildFilter(new SearchFilter(Map.of(), null, "  ")).toString())
+                .isEqualTo(RetrievalService.buildFilter(SearchFilter.NONE).toString());
+    }
+
+    @Test
+    void rerankerHttpError_fallsBackToInitialOrder() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a"), doc("b")));
+        when(reranker.rerank(any(), any(), anyInt())).thenThrow(
+                HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "Bad Gateway", null, null, null));
+
+        assertThat(service.retrieve("q", config(5, true, SearchMode.VECTOR, 0.5, null)))
+                .extracting(Document::getId).containsExactly("a", "b");
     }
 
     @Test

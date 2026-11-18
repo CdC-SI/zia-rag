@@ -43,7 +43,10 @@ public class RetrievalController {
                     + "filters on any non-reserved metadata key and a case-insensitive substring the "
                     + "content must contain. In HYBRID mode, reranking is forced. In FILTER mode, a plain "
                     + "SQL query on the filters is issued (no embedding, ordered by id): the question is "
-                    + "optional and ignored, the reranker is ignored and at least one filter is required.")
+                    + "optional and ignored, the reranker is ignored and at least one filter is required. Only "
+                    + "public documents are returned, plus the private documents of 'userId' when given. "
+                    + "Optional thresholds (minRerankScore, minBm25Score) drop low-scoring documents; if the "
+                    + "reranker fails, the initial order is kept (truncated to topK).")
     @ApiResponse(
             responseCode = "200",
             description = "The relevant documents, most relevant first.",
@@ -60,7 +63,7 @@ public class RetrievalController {
 
     @Operation(
             summary = "List available sources",
-            description = "Returns the distinct 'source' metadata values available in the vector "
+            description = "Returns the distinct 'source' metadata values of the public documents of the vector "
                     + "store. These values can be used to filter documents in a retrieval request.")
     @ApiResponse(
             responseCode = "200",
