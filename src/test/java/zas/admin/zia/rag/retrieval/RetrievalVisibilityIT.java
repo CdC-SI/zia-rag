@@ -10,6 +10,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import zas.admin.zia.rag.observability.CorrelationIdFilter;
+
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.matchesPattern;
@@ -34,13 +47,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * expression) and on the SQL paths ({@code SqlWhereClause}: FILTER mode, vector search with a content filter).
  */
 @SpringBootTest(properties = {
-        "zas.security.blue-token.public-key=test",
+        "zas.security.blue-token.header-name=Blue",
+        "zia.security.retriever-groups=" + RetrievalVisibilityIT.RETRIEVER_GROUP,
         "spring.ai.vectorstore.pgvector.dimensions=3"
 })
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
 @Transactional
 class RetrievalVisibilityIT {
+
+    static final String RETRIEVER_GROUP =
+            "cn=RETRIEVER,ou=DEV,ou=MyApp,ou=Applications,ou=Groups,dc=example,dc=org";
+    private static final String BLUE_HEADER = "Blue";
+    private static final KeyPair GATEWAY_KEYS = generateRsaKeyPair();
 
     @Container
     @ServiceConnection
@@ -64,6 +83,12 @@ class RetrievalVisibilityIT {
     @MockitoBean
     private OpenAiEmbeddingModel embeddingModel;
 
+    @DynamicPropertySource
+    static void gatewayPublicKey(DynamicPropertyRegistry registry) {
+        registry.add("zas.security.blue-token.public-key",
+                () -> Base64.getEncoder().encodeToString(GATEWAY_KEYS.getPublic().getEncoded()));
+    }
+
     @BeforeEach
     void data() {
         when(embeddingModel.embed(anyString())).thenReturn(new float[]{1f, 0f, 0f});
@@ -80,6 +105,7 @@ class RetrievalVisibilityIT {
 
     private ResultActions retrieve(String body) throws Exception {
         return mockMvc.perform(post("/api/v1/retrieval/documents")
+                .header(BLUE_HEADER, "Bearer " + blueToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
     }
@@ -144,13 +170,48 @@ class RetrievalVisibilityIT {
     void correlationId_isEchoedOrGenerated() throws Exception {
         mockMvc.perform(post("/api/v1/retrieval/documents")
                         .header(CorrelationIdFilter.HEADER, "it-correlation-1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(request("FILTER", null, null)))
+                .header(BLUE_HEADER, "Bearer " + blueToken())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request("FILTER", null, null)))
                 .andExpect(status().isOk())
                 .andExpect(header().string(CorrelationIdFilter.HEADER, "it-correlation-1"));
 
         retrieve(request("FILTER", null, null))
                 .andExpect(status().isOk())
                 .andExpect(header().string(CorrelationIdFilter.HEADER, matchesPattern("[0-9a-f-]{36}")));
+    }
+
+    private static String blueToken() throws GeneralSecurityException {
+        String rolesJson = List.of(RETRIEVER_GROUP).stream()
+                .map(role -> "\"" + role + "\"")
+                .collect(Collectors.joining(",", "[", "]"));
+        String subject = """
+                {"userUID":"test-user","visa":"TST","firstname":"Test","lastname":"User","roles":%s}"""
+                .formatted(rolesJson);
+        String header = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
+        String payload = "{\"sub\":\"%s\",\"exp\":%d}"
+                .formatted(subject.replace("\"", "\\\""), Instant.now().plusSeconds(300).getEpochSecond());
+
+        String signingInput = base64Url(header.getBytes(StandardCharsets.UTF_8)) + "."
+                + base64Url(payload.getBytes(StandardCharsets.UTF_8));
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        PrivateKey signingKey = GATEWAY_KEYS.getPrivate();
+        signature.initSign(signingKey);
+        signature.update(signingInput.getBytes(StandardCharsets.US_ASCII));
+        return signingInput + "." + base64Url(signature.sign());
+    }
+
+    private static String base64Url(byte[] bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static KeyPair generateRsaKeyPair() {
+        try {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            return generator.generateKeyPair();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
