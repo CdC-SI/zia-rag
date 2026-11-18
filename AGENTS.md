@@ -9,7 +9,7 @@ API REST sous `/zia-rag/api/v1/retrieval` : voir `README.md` (endpoints, modes `
 - **Java 25**, **Spring Boot 4.1.x**, **Spring AI 2.0.x** (pgvector, embeddings OpenAI-compatibles), **Maven**.
 - springdoc-openapi (`/zia-rag/swagger-ui.html`), configuration dans `src/main/resources/application.yml`.
 - Package racine : `zas.admin.zia.rag` — `web/` (controllers + `dto/`), `retrieval/`, `rerank/` (+ `dto/`),
-  `config/` (+ `properties/`), `logging/`.
+  `config/` (+ `properties/`), `logging/`, `observability/` (`X-Correlation-Id`, MDC `correlation`).
 
 ## Build & tests
 
@@ -25,8 +25,10 @@ API REST sous `/zia-rag/api/v1/retrieval` : voir `README.md` (endpoints, modes `
 
 - **Pas de Lombok.** Records pour les DTOs ; injection par constructeur.
 - Propriétés de configuration typées (`config/properties`, `@ConfigurationProperties`).
-- Seuls les documents publics (métadonnée `user_uuid` absente ou vide) sont retournés : ne jamais
-  relâcher ce filtre. Les clés réservées (`zia.rag.retrieval.reserved-metadata-keys`) restent non filtrables.
+- Seuls les documents publics (métadonnée `user_uuid` absente ou vide) sont retournés, plus les
+  documents privés de `userId` lorsqu'il est fourni : ne jamais relâcher davantage ce filtre (chemins
+  `RetrievalService.buildFilter` **et** `SqlWhereClause`). Les clés réservées
+  (`zia.rag.retrieval.reserved-metadata-keys`) restent non filtrables.
 - Toute évolution de l'API doit être reflétée dans `README.md` et dans l'OpenAPI ; conserver la
   compatibilité des champs dépréciés (`useBm25`, `sources`) tant qu'ils sont documentés.
 - Tests obligatoires pour toute nouvelle fonctionnalité.

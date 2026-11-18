@@ -27,6 +27,28 @@ class SqlWhereClauseTest {
     }
 
     @Test
+    void userId_alsoMatchesPrivateDocumentsOfThatUser() throws Exception {
+        SqlWhereClause where = SqlWhereClause.of(new SearchFilter(Map.of("source", List.of("faq")), null, "u-1"));
+
+        assertThat(where.sql()).startsWith("WHERE (metadata->>'user_uuid' IS NULL OR metadata->>'user_uuid' = '' "
+                + "OR metadata->>'user_uuid' = ?) AND metadata->>? = ANY(?) ");
+
+        Connection connection = mock(Connection.class);
+        PreparedStatement ps = mock(PreparedStatement.class);
+        int next = where.bind(connection, ps, 1);
+
+        assertThat(next).isEqualTo(4);
+        verify(ps).setString(1, "u-1");
+        verify(ps).setString(2, "source");
+    }
+
+    @Test
+    void blankUserId_meansPublicDocumentsOnly() {
+        assertThat(SqlWhereClause.of(new SearchFilter(Map.of(), null, "  ")).sql())
+                .isEqualTo(SqlWhereClause.of(SearchFilter.NONE).sql());
+    }
+
+    @Test
     void metadataAndContentFilters_areBoundAsParameters() throws Exception {
         Map<String, List<String>> metadata = new LinkedHashMap<>();
         metadata.put("source", List.of("faq"));

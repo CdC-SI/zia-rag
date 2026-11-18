@@ -74,8 +74,8 @@ public class RemoteReranker implements Reranker {
                 .body(RerankResponse.class);
 
         if (response == null || response.data() == null || response.data().isEmpty()) {
-            // Fail open: keep the incoming order, simply truncated.
-            return documents.stream().limit(topK).toList();
+            // Handled by the caller like any other reranker failure (fallback on the initial order).
+            throw new IllegalStateException("Empty response from the reranker");
         }
 
         return response.data().stream()

@@ -36,10 +36,17 @@ public class SearchFilterResolver {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    @SuppressWarnings("deprecation")
     public SearchFilter resolve(RetrievalConfig config) {
+        return resolve(config, null);
+    }
+
+    /**
+     * @param userId user whose private documents are also visible, or {@code null} for public documents only
+     */
+    @SuppressWarnings("deprecation")
+    public SearchFilter resolve(RetrievalConfig config, String userId) {
         if (config == null) {
-            return SearchFilter.NONE;
+            return new SearchFilter(Map.of(), null, userId);
         }
         Map<String, Set<String>> merged = new LinkedHashMap<>();
         config.metadataFilters().forEach((key, values) -> add(merged, key, values));
@@ -51,7 +58,7 @@ public class SearchFilterResolver {
         merged.forEach((key, values) -> metadata.put(key, List.copyOf(values)));
 
         String content = StringUtils.hasText(config.contentContains()) ? config.contentContains() : null;
-        return new SearchFilter(Collections.unmodifiableMap(metadata), content);
+        return new SearchFilter(Collections.unmodifiableMap(metadata), content, userId);
     }
 
     private void add(Map<String, Set<String>> merged, String key, Collection<String> values) {

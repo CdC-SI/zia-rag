@@ -6,6 +6,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.web.client.RestClientException;
 import zas.admin.zia.rag.config.properties.RetrievalProperties;
 import zas.admin.zia.rag.rerank.Reranker;
 import zas.admin.zia.rag.web.dto.RetrievalConfig;
@@ -33,14 +34,15 @@ class RetrievalServiceTest {
     private final FilterRetriever filterRetriever = mock(FilterRetriever.class);
     private final Reranker reranker = mock(Reranker.class);
     private final RetrievalService service = new RetrievalService(vectorStore, pgVectorJdbcRetriever,
-            bm25Retriever, filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null)));
+            bm25Retriever, filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null)),
+            new RetrievalProperties(null, null, null));
 
     private static Document doc(String id) {
         return Document.builder().id(id).text("content-" + id).build();
     }
 
     private static RetrievalConfig config(int topK, boolean useReranker, SearchMode mode) {
-        return new RetrievalConfig(topK, useReranker, mode, null, null, null, null);
+        return new RetrievalConfig(topK, useReranker, mode, null, null, null, null, null, null);
     }
 
     @Test
@@ -88,10 +90,10 @@ class RetrievalServiceTest {
     @Test
     @SuppressWarnings("deprecation")
     void deprecatedUseBm25_meansHybrid() {
-        RetrievalConfig config = new RetrievalConfig(3, false, null, null, null, true, null);
+        RetrievalConfig config = new RetrievalConfig(3, false, null, null, null, true, null, null, null);
 
         assertThat(config.searchMode()).isEqualTo(SearchMode.HYBRID);
-        assertThat(new RetrievalConfig(3, false, SearchMode.BM25, null, null, true, null).searchMode())
+        assertThat(new RetrievalConfig(3, false, SearchMode.BM25, null, null, true, null, null, null).searchMode())
                 .isEqualTo(SearchMode.BM25);
     }
 
@@ -136,7 +138,7 @@ class RetrievalServiceTest {
         when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of());
 
         service.retrieve("q", new RetrievalConfig(5, false, SearchMode.HYBRID,
-                Map.of("lang", List.of("fr", "de")), null, null, List.of("faq")));
+                Map.of("lang", List.of("fr", "de")), null, null, List.of("faq"), null, null));
 
         ArgumentCaptor<SearchRequest> request = ArgumentCaptor.forClass(SearchRequest.class);
         verify(vectorStore).similaritySearch(request.capture());
@@ -160,11 +162,47 @@ class RetrievalServiceTest {
     }
 
     @Test
+    void userId_widensVisibilityToPrivateDocumentsInEveryRetriever() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(bm25Retriever.retrieve(any(), any(), anyInt())).thenReturn(List.of());
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of());
+
+        service.retrieve("q", config(5, false, SearchMode.HYBRID), "u-1");
+
+        ArgumentCaptor<SearchRequest> request = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(vectorStore).similaritySearch(request.capture());
+        Filter.Expression expression = request.getValue().getFilterExpression();
+        assertThat(expression.type()).isEqualTo(Filter.ExpressionType.IN);
+        assertThat(expression.toString()).contains("user_uuid", "u-1");
+
+        ArgumentCaptor<SearchFilter> filter = ArgumentCaptor.forClass(SearchFilter.class);
+        verify(bm25Retriever).retrieve(eq("q"), filter.capture(), eq(5));
+        assertThat(filter.getValue().userId()).isEqualTo("u-1");
+    }
+
+    @Test
+    void withoutUserId_onlyPublicDocumentsAreVisible() {
+        Filter.Expression expression = RetrievalService.buildFilter(SearchFilter.NONE);
+
+        assertThat(expression.type()).isEqualTo(Filter.ExpressionType.EQ);
+        assertThat(expression.toString()).contains("user_uuid");
+    }
+
+    @Test
+    void userId_doesNotSatisfyFilterModeRequirement() {
+        RetrievalConfig config = config(3, false, SearchMode.FILTER);
+
+        assertThatThrownBy(() -> service.retrieve(null, config, "u-1"))
+                .isInstanceOf(InvalidSearchFilterException.class);
+        verifyNoInteractions(filterRetriever);
+    }
+
+    @Test
     void contentFilter_usesJdbcVectorRetrieverInsteadOfVectorStore() {
         when(pgVectorJdbcRetriever.retrieve(eq("q"), any(), eq(4))).thenReturn(List.of(doc("a")));
 
         List<Document> result = service.retrieve("q", new RetrievalConfig(4, false, SearchMode.VECTOR,
-                null, "mot de passe", null, null));
+                null, "mot de passe", null, null, null, null));
 
         assertThat(result).extracting(Document::getId).containsExactly("a");
         ArgumentCaptor<SearchFilter> filter = ArgumentCaptor.forClass(SearchFilter.class);
@@ -176,7 +214,7 @@ class RetrievalServiceTest {
     @Test
     void reservedMetadataKey_isRejectedBeforeAnySearch() {
         RetrievalConfig config = new RetrievalConfig(4, false, SearchMode.HYBRID,
-                Map.of("user_uuid", List.of("someone")), null, null, null);
+                Map.of("user_uuid", List.of("someone")), null, null, null, null, null);
 
         assertThatThrownBy(() -> service.retrieve("q", config))
                 .isInstanceOf(InvalidSearchFilterException.class)
@@ -189,7 +227,7 @@ class RetrievalServiceTest {
         when(filterRetriever.retrieve(any(), eq(7))).thenReturn(List.of(doc("a")));
 
         List<Document> result = service.retrieve(null, new RetrievalConfig(7, true, SearchMode.FILTER,
-                Map.of("file_name", List.of("318_104_01_f")), null, null, null));
+                Map.of("file_name", List.of("318_104_01_f")), null, null, null, null, null));
 
         assertThat(result).extracting(Document::getId).containsExactly("a");
         ArgumentCaptor<SearchFilter> filter = ArgumentCaptor.forClass(SearchFilter.class);
@@ -202,7 +240,7 @@ class RetrievalServiceTest {
     void filterMode_acceptsContentFilterOnly() {
         when(filterRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
 
-        service.retrieve("  ", new RetrievalConfig(3, false, SearchMode.FILTER, null, "mot de passe", null, null));
+        service.retrieve("  ", new RetrievalConfig(3, false, SearchMode.FILTER, null, "mot de passe", null, null, null, null));
 
         verify(filterRetriever).retrieve(any(), eq(3));
     }
@@ -225,5 +263,90 @@ class RetrievalServiceTest {
                     .hasMessageContaining("question");
         }
         verifyNoInteractions(filterRetriever, vectorStore, bm25Retriever, pgVectorJdbcRetriever, reranker);
+    }
+
+    private static Document doc(String id, double score) {
+        return Document.builder().id(id).text("content-" + id).score(score).build();
+    }
+
+    private static RetrievalConfig config(int topK, boolean useReranker, SearchMode mode,
+                                          Double minRerankScore, Double minBm25Score) {
+        return new RetrievalConfig(topK, useReranker, mode, null, null, null, null, minRerankScore, minBm25Score);
+    }
+
+    @Test
+    void rerankerFailure_fallsBackToInitialOrderTruncated() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class)))
+                .thenReturn(List.of(doc("a"), doc("b"), doc("c")));
+        when(reranker.rerank(any(), any(), anyInt())).thenThrow(new RestClientException("connection refused"));
+
+        List<Document> result = service.retrieve("q", config(2, true, SearchMode.VECTOR));
+
+        assertThat(result).extracting(Document::getId).containsExactly("a", "b");
+    }
+
+    @Test
+    void hybrid_rerankerFailure_keepsVectorThenBm25Order() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a")));
+        when(bm25Retriever.retrieve(eq("q"), any(), eq(3))).thenReturn(List.of(doc("a"), doc("b"), doc("c")));
+        when(reranker.rerank(any(), any(), anyInt())).thenThrow(new IllegalStateException("Empty response"));
+
+        List<Document> result = service.retrieve("q", config(3, false, SearchMode.HYBRID));
+
+        assertThat(result).extracting(Document::getId).containsExactly("a", "b", "c");
+    }
+
+    @Test
+    void minRerankScore_dropsLowRerankedDocuments_andIgnoresThresholdOnFallback() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a"), doc("b")));
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of(doc("b", 0.9), doc("a", 0.2)));
+
+        assertThat(service.retrieve("q", config(5, true, SearchMode.VECTOR, 0.5, null)))
+                .extracting(Document::getId).containsExactly("b");
+
+        when(reranker.rerank(any(), any(), anyInt())).thenThrow(new RestClientException("timeout"));
+        assertThat(service.retrieve("q", config(5, true, SearchMode.VECTOR, 0.5, null)))
+                .extracting(Document::getId).containsExactly("a", "b");
+    }
+
+    @Test
+    void minRerankScore_isIgnoredWithoutReranker() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a", 0.1)));
+
+        assertThat(service.retrieve("q", config(5, false, SearchMode.VECTOR, 0.5, null)))
+                .extracting(Document::getId).containsExactly("a");
+    }
+
+    @Test
+    void thresholds_defaultToProperties_andRequestOverridesThem() {
+        RetrievalService withDefaults = new RetrievalService(vectorStore, pgVectorJdbcRetriever, bm25Retriever,
+                filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null)),
+                new RetrievalProperties(null, 0.5, 2.0));
+        when(bm25Retriever.retrieve(eq("q"), any(), anyInt()))
+                .thenReturn(List.of(doc("x", 3.0), doc("y", 1.0)));
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of(doc("x", 0.6), doc("y", 0.4)));
+
+        assertThat(withDefaults.retrieve("q", config(5, false, SearchMode.BM25)))
+                .extracting(Document::getId).containsExactly("x");
+        assertThat(withDefaults.retrieve("q", config(5, false, SearchMode.BM25, null, 0.5)))
+                .extracting(Document::getId).containsExactly("x", "y");
+        assertThat(withDefaults.retrieve("q", config(5, true, SearchMode.BM25, 0.3, 0.5)))
+                .extracting(Document::getId).containsExactly("x", "y");
+        assertThat(withDefaults.retrieve("q", config(5, true, SearchMode.BM25, null, 0.5)))
+                .extracting(Document::getId).containsExactly("x");
+    }
+
+    @Test
+    void minBm25Score_filtersBm25ResultsBeforeHybridReranking() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a", 0.8)));
+        when(bm25Retriever.retrieve(eq("q"), any(), eq(3))).thenReturn(List.of(doc("b", 4.0), doc("c", 0.5)));
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of());
+
+        service.retrieve("q", config(3, false, SearchMode.HYBRID, null, 1.0));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
+        verify(reranker).rerank(eq("q"), captor.capture(), eq(3));
+        assertThat(captor.getValue()).extracting(Document::getId).containsExactly("a", "b");
     }
 }

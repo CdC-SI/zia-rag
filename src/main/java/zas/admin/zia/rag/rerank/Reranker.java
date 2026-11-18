@@ -15,7 +15,8 @@ public interface Reranker {
      * @param query     the user query
      * @param documents the candidate documents (union of the retrievers)
      * @param topK      the maximum number of documents to return
-     * @return the reranked, truncated list of documents
+     * @return the reranked, truncated list of documents, scored by the reranker
+     * @throws RuntimeException when the reranker is unavailable or returns no scores
      */
     List<Document> rerank(String query, List<Document> documents, int topK);
 }

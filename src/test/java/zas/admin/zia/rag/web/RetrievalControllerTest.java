@@ -44,7 +44,7 @@ class RetrievalControllerTest {
 
     @Test
     void retrieveDocuments_returnsDocuments() throws Exception {
-        when(retrievalService.retrieve(eq("hello"), any()))
+        when(retrievalService.retrieve(eq("hello"), any(), any()))
                 .thenReturn(List.of(Document.builder().id("d1").text("body").build()));
 
         mockMvc.perform(post("/api/v1/retrieval/documents")
@@ -59,7 +59,7 @@ class RetrievalControllerTest {
 
     @Test
     void retrieveDocuments_bindsNewConfigFields() throws Exception {
-        when(retrievalService.retrieve(eq("hello"), any())).thenReturn(List.of());
+        when(retrievalService.retrieve(eq("hello"), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(post("/api/v1/retrieval/documents")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -69,23 +69,27 @@ class RetrievalControllerTest {
                                   "config": {
                                     "searchMode": "BM25",
                                     "metadataFilters": { "lang": ["fr"] },
-                                    "contentContains": "mot de passe"
+                                    "contentContains": "mot de passe",
+                                    "minRerankScore": 0.3,
+                                    "minBm25Score": 1.5
                                   }
                                 }
                                 """))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<RetrievalConfig> captor = ArgumentCaptor.forClass(RetrievalConfig.class);
-        verify(retrievalService).retrieve(eq("hello"), captor.capture());
+        verify(retrievalService).retrieve(eq("hello"), captor.capture(), isNull());
         RetrievalConfig config = captor.getValue();
         assertThat(config.searchMode()).isEqualTo(SearchMode.BM25);
         assertThat(config.metadataFilters()).containsEntry("lang", List.of("fr"));
         assertThat(config.contentContains()).isEqualTo("mot de passe");
+        assertThat(config.minRerankScore()).isEqualTo(0.3);
+        assertThat(config.minBm25Score()).isEqualTo(1.5);
     }
 
     @Test
     void retrieveDocuments_invalidFilter_returnsBadRequest() throws Exception {
-        when(retrievalService.retrieve(eq("hello"), any()))
+        when(retrievalService.retrieve(eq("hello"), any(), any()))
                 .thenThrow(new InvalidSearchFilterException("Filtering on metadata key 'user_uuid' is not allowed"));
 
         mockMvc.perform(post("/api/v1/retrieval/documents")
@@ -135,7 +139,7 @@ class RetrievalControllerTest {
 
     @Test
     void retrieveDocuments_filterModeWithoutQuestion_returnsDocuments() throws Exception {
-        when(retrievalService.retrieve(any(), any()))
+        when(retrievalService.retrieve(any(), any(), any()))
                 .thenReturn(List.of(Document.builder().id("d1").text("body").build()));
 
         mockMvc.perform(post("/api/v1/retrieval/documents")
@@ -147,8 +151,34 @@ class RetrievalControllerTest {
                 .andExpect(jsonPath("$[0].id").value("d1"));
 
         ArgumentCaptor<RetrievalConfig> captor = ArgumentCaptor.forClass(RetrievalConfig.class);
-        verify(retrievalService).retrieve(isNull(), captor.capture());
+        verify(retrievalService).retrieve(isNull(), captor.capture(), isNull());
         assertThat(captor.getValue().searchMode()).isEqualTo(SearchMode.FILTER);
+    }
+
+    @Test
+    void retrieveDocuments_forwardsUserId() throws Exception {
+        when(retrievalService.retrieve(eq("hello"), any(), any())).thenReturn(List.of());
+
+        mockMvc.perform(post("/api/v1/retrieval/documents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "question": "hello", "userId": "3f2c1b8e-5d4a-4e7b-9c1a-2b3c4d5e6f70" }
+                                """))
+                .andExpect(status().isOk());
+
+        verify(retrievalService).retrieve(eq("hello"), any(), eq("3f2c1b8e-5d4a-4e7b-9c1a-2b3c4d5e6f70"));
+    }
+
+    @Test
+    void retrieveDocuments_invalidUserId_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/retrieval/documents")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "question": "hello", "userId": "x\\" || @.a == \\"" }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(retrievalService);
     }
 
     @Test
