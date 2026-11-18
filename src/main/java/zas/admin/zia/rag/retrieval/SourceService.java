@@ -7,7 +7,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * Lists the distinct {@code source} metadata values present in the vector store.
+ * Lists the distinct {@code source} metadata values of the public documents of the vector store (the
+ * sources of private documents are never listed).
  */
 @Service
 public class SourceService {
@@ -24,12 +25,13 @@ public class SourceService {
     }
 
     /**
-     * @return the distinct, non-null {@code source} metadata values, sorted alphabetically
+     * @return the distinct, non-null {@code source} metadata values of the public documents, sorted alphabetically
      */
     public List<String> listSources() {
         String sql = "SELECT DISTINCT metadata->>'source' AS source "
                 + "FROM " + qualifiedTable + " "
-                + "WHERE metadata->>'source' IS NOT NULL "
+                + SqlWhereClause.of(SearchFilter.NONE).sql()
+                + "AND metadata->>'source' IS NOT NULL "
                 + "ORDER BY source";
         return jdbcTemplate.queryForList(sql, String.class);
     }
