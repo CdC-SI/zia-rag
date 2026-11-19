@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SearchFilterResolverTest {
 
-    private final SearchFilterResolver resolver = new SearchFilterResolver(new RetrievalProperties(null, null, null));
+    private final SearchFilterResolver resolver = new SearchFilterResolver(new RetrievalProperties(null, null, null, null, null, null));
 
     private static RetrievalConfig config(Map<String, List<String>> metadata, String content, List<String> sources) {
         return new RetrievalConfig(null, null, null, metadata, content, null, sources, null, null);
@@ -62,7 +62,7 @@ class SearchFilterResolverTest {
 
     @Test
     void reservedKeysAreConfigurable() {
-        SearchFilterResolver custom = new SearchFilterResolver(new RetrievalProperties(List.of("user_uuid", "secret"), null, null));
+        SearchFilterResolver custom = new SearchFilterResolver(new RetrievalProperties(List.of("user_uuid", "secret"), null, null, null, null, null));
 
         assertThatThrownBy(() -> custom.resolve(config(Map.of("secret", List.of("x")), null, null)))
                 .isInstanceOf(InvalidSearchFilterException.class);

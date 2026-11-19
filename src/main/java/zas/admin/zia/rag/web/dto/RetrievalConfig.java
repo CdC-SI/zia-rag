@@ -10,8 +10,8 @@ import java.util.Map;
 public record RetrievalConfig(
 
         @Schema(
-                description = "Maximum number of documents to return.",
-                defaultValue = "10",
+                description = "Maximum number of documents to return. Defaults to "
+                        + "zia.rag.retrieval.default-top-k (10 unless configured).",
                 example = "10")
         @Positive(message = "topK must be a positive number")
         Integer topK,
@@ -19,8 +19,8 @@ public record RetrievalConfig(
         @Schema(
                 description = "Whether to rerank the retrieved documents with the remote reranker. "
                         + "Automatically forced to true in HYBRID mode, because vector and BM25 scores "
-                        + "are not comparable.",
-                defaultValue = "false")
+                        + "are not comparable. Defaults to zia.rag.retrieval.default-use-reranker "
+                        + "(false unless configured).")
         Boolean useReranker,
 
         @Schema(
@@ -28,8 +28,8 @@ public record RetrievalConfig(
                         + "BM25 search only. HYBRID: both, unioned, deduplicated and reranked. FILTER: plain "
                         + "SQL query on metadataFilters/contentContains (at least one required), no "
                         + "embedding, question and useReranker ignored, ordered by id. "
-                        + "Defaults to HYBRID when the deprecated 'useBm25' is true, VECTOR otherwise.",
-                defaultValue = "VECTOR")
+                        + "Defaults to HYBRID when the deprecated 'useBm25' is true, to "
+                        + "zia.rag.retrieval.default-search-mode (VECTOR unless configured) otherwise.")
         SearchMode searchMode,
 
         @Schema(
@@ -76,20 +76,16 @@ public record RetrievalConfig(
         Double minBm25Score
 ) {
 
-    public static final int DEFAULT_TOP_K = 10;
-
+    /**
+     * {@code topK}, {@code useReranker} and {@code searchMode} stay {@code null} when omitted: the server defaults
+     * ({@code zia.rag.retrieval.default-*}) are applied by the retrieval service.
+     */
     public RetrievalConfig {
-        if (topK == null) {
-            topK = DEFAULT_TOP_K;
-        }
-        if (useReranker == null) {
-            useReranker = false;
-        }
         if (useBm25 == null) {
             useBm25 = false;
         }
-        if (searchMode == null) {
-            searchMode = useBm25 ? SearchMode.HYBRID : SearchMode.VECTOR;
+        if (searchMode == null && useBm25) {
+            searchMode = SearchMode.HYBRID;
         }
         if (metadataFilters == null) {
             metadataFilters = Map.of();

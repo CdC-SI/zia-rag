@@ -33,8 +33,9 @@ Base path : `/zia-rag/api/v1/retrieval`
 - `userId` (optionnel, racine de la requête) : `users.uuid` de l'utilisateur final ; ses documents
   privés sont recherchés en plus des documents publics (voir la note plus bas). Caractères
   autorisés : `[A-Za-z0-9._@-]`, 255 au plus (sinon `400`).
-- `topK` : nombre maximum de documents retournés (défaut : 10).
-- `searchMode` : stratégie de recherche (défaut : `VECTOR`).
+- `topK` : nombre maximum de documents retournés (défaut : `zia.rag.retrieval.default-top-k`, 10).
+- `searchMode` : stratégie de recherche (défaut : `zia.rag.retrieval.default-search-mode`, `VECTOR` ;
+  `FILTER` interdit comme défaut).
   - `VECTOR` : recherche vectorielle seule.
   - `BM25` : recherche plein-texte BM25 seule (extension PG `pg_textsearch`,
     index `idx_vector_store_content_bm25`).
@@ -43,7 +44,8 @@ Base path : `/zia-rag/api/v1/retrieval`
   - `FILTER` : simple requête SQL sur `metadataFilters` et/ou `contentContains`, sans embedding
     ni reranking (`question` et `useReranker` ignorés). Au moins un filtre est requis (sinon `400`).
     Les résultats sont triés par identifiant, limités à `topK`, sans score.
-- `useReranker` : active le reranking distant (`VECTOR` et `BM25`). Si le reranker échoue (erreur,
+- `useReranker` : active le reranking distant (`VECTOR` et `BM25` ; défaut :
+  `zia.rag.retrieval.default-use-reranker`, `false`). Si le reranker échoue (erreur,
   timeout, réponse vide), les documents gardent leur ordre initial (en `HYBRID` : résultats vectoriels
   puis BM25), tronqués à `topK` ; l'échec est journalisé (`WARN`) et la requête aboutit.
 - `minRerankScore` (optionnel) : score reranker minimal ; les documents rerankés en dessous sont
@@ -110,6 +112,7 @@ Variables d'environnement principales (voir `application.yml`) :
 | `ZIA_RERANK_BASE_URL`, `ZIA_RERANK_API_KEY`, `ZIA_RERANK_MODEL` | Service de reranking distant. |
 | `ZIA_RERANK_CONNECT_TIMEOUT`, `ZIA_RERANK_READ_TIMEOUT` | Timeouts du reranker (défaut : `2s`, `10s`) ; au-delà, repli sur l'ordre initial. |
 | `ZIA_RAG_MIN_RERANK_SCORE`, `ZIA_RAG_MIN_BM25_SCORE` | Seuils par défaut (vide = aucun), surchargeables par requête. |
+| `ZIA_RAG_DEFAULT_TOP_K`, `ZIA_RAG_DEFAULT_SEARCH_MODE`, `ZIA_RAG_DEFAULT_USE_RERANKER` | Valeurs de `topK`, `searchMode` (`VECTOR`, `BM25` ou `HYBRID`) et `useReranker` quand la requête ne les précise pas (défaut : `10`, `VECTOR`, `false`). Le backend ZIA n'envoie que la question, le filtre de sources et `userId` : ces variables portent son profil de recherche (actuellement `5`, `VECTOR`, `true`, avec `ZIA_RAG_MIN_RERANK_SCORE=0.5`). |
 | `GATEWAY_PUBLIC_KEY` | Clé publique (Base64) de la gateway pour valider le jeton bleu (profil `internal`). |
 | `ZIA_SECURITY_RETRIEVER_GROUPS` | Groupes RHDS (DN complets, séparés par `;`) autorisés à appeler l'API (profil `internal`). Vide = tout refusé. |
 | `ZIA_RAG_RESERVED_METADATA_KEYS` | Clés de métadonnées non filtrables, séparées par `,` (défaut : `user_uuid`). |

@@ -39,6 +39,10 @@ zia:
       reserved-metadata-keys: ${ZIA_RAG_RESERVED_METADATA_KEYS:user_uuid}
       min-rerank-score: ${ZIA_RAG_MIN_RERANK_SCORE:}
       min-bm25-score: ${ZIA_RAG_MIN_BM25_SCORE:}
+      # Valeurs appliquées quand la requête ne les précise pas (le backend ZIA n'envoie que la question et ses filtres).
+      default-top-k: ${ZIA_RAG_DEFAULT_TOP_K:10}
+      default-search-mode: ${ZIA_RAG_DEFAULT_SEARCH_MODE:VECTOR}
+      default-use-reranker: ${ZIA_RAG_DEFAULT_USE_RERANKER:false}
   security:
     retriever-groups: ${ZIA_SECURITY_RETRIEVER_GROUPS:}
   logging:
