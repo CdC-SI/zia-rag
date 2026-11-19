@@ -42,6 +42,8 @@ public record RetrievalRequest(
     @Schema(hidden = true)
     @AssertTrue(message = "question must not be blank unless searchMode is FILTER")
     public boolean isQuestionValid() {
-        return !config.searchMode().requiresQuestion() || (question != null && !question.isBlank());
+        // The server default search mode cannot be FILTER, so an omitted mode requires a question.
+        boolean requiresQuestion = config.searchMode() == null || config.searchMode().requiresQuestion();
+        return !requiresQuestion || (question != null && !question.isBlank());
     }
 }

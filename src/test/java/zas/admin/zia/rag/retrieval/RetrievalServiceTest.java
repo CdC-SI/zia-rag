@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -37,8 +38,8 @@ class RetrievalServiceTest {
     private final FilterRetriever filterRetriever = mock(FilterRetriever.class);
     private final Reranker reranker = mock(Reranker.class);
     private final RetrievalService service = new RetrievalService(vectorStore, pgVectorJdbcRetriever,
-            bm25Retriever, filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null)),
-            new RetrievalProperties(null, null, null));
+            bm25Retriever, filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null, null, null, null)),
+            new RetrievalProperties(null, null, null, null, null, null));
 
     private static Document doc(String id) {
         return Document.builder().id(id).text("content-" + id).build();
@@ -349,8 +350,8 @@ class RetrievalServiceTest {
     @Test
     void thresholds_defaultToProperties_andRequestOverridesThem() {
         RetrievalService withDefaults = new RetrievalService(vectorStore, pgVectorJdbcRetriever, bm25Retriever,
-                filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null)),
-                new RetrievalProperties(null, 0.5, 2.0));
+                filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null, null, null, null)),
+                new RetrievalProperties(null, 0.5, 2.0, null, null, null));
         when(bm25Retriever.retrieve(eq("q"), any(), anyInt()))
                 .thenReturn(List.of(doc("x", 3.0), doc("y", 1.0)));
         when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of(doc("x", 0.6), doc("y", 0.4)));
@@ -363,6 +364,37 @@ class RetrievalServiceTest {
                 .extracting(Document::getId).containsExactly("x", "y");
         assertThat(withDefaults.retrieve("q", config(5, true, SearchMode.BM25, null, 0.5)))
                 .extracting(Document::getId).containsExactly("x");
+    }
+
+    @Test
+    void omittedSettings_useServerDefaults_andRequestOverridesThem() {
+        RetrievalService withDefaults = new RetrievalService(vectorStore, pgVectorJdbcRetriever, bm25Retriever,
+                filterRetriever, reranker, new SearchFilterResolver(new RetrievalProperties(null, null, null, null, null, null)),
+                new RetrievalProperties(null, null, null, 2, SearchMode.BM25, true));
+        when(bm25Retriever.retrieve(eq("q"), any(), anyInt())).thenReturn(List.of(doc("x"), doc("y"), doc("z")));
+        when(reranker.rerank(any(), any(), anyInt())).thenReturn(List.of(doc("y"), doc("x")));
+
+        assertThat(withDefaults.retrieve("q", null)).extracting(Document::getId).containsExactly("y", "x");
+        verify(bm25Retriever).retrieve(eq("q"), any(), eq(2));
+        verify(reranker).rerank(eq("q"), any(), eq(2));
+        verifyNoInteractions(vectorStore, pgVectorJdbcRetriever);
+
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc("a"), doc("b")));
+        assertThat(withDefaults.retrieve("q", config(1, false, SearchMode.VECTOR)))
+                .extracting(Document::getId).containsExactly("a");
+        verify(reranker, times(1)).rerank(any(), any(), anyInt());
+    }
+
+    @Test
+    void defaultSearchMode_cannotBeFilter_andDefaultTopKMustBePositive() {
+        assertThatThrownBy(() -> new RetrievalProperties(null, null, null, null, SearchMode.FILTER, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new RetrievalProperties(null, null, null, 0, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        RetrievalProperties defaults = new RetrievalProperties(null, null, null, null, null, null);
+        assertThat(defaults.defaultTopK()).isEqualTo(10);
+        assertThat(defaults.defaultSearchMode()).isEqualTo(SearchMode.VECTOR);
+        assertThat(defaults.defaultUseReranker()).isFalse();
     }
 
     @Test

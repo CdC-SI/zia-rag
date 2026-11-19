@@ -80,14 +80,17 @@ public class RetrievalService {
     public List<Document> retrieve(String question, RetrievalConfig config, String userId) {
         RetrievalConfig effectiveConfig = config == null ? RetrievalConfig.defaults() : config;
         SearchFilter filter = searchFilterResolver.resolve(effectiveConfig, userId);
-        int topK = effectiveConfig.topK();
-        SearchMode mode = effectiveConfig.searchMode();
+        int topK = effectiveConfig.topK() != null ? effectiveConfig.topK() : properties.defaultTopK();
+        SearchMode mode = effectiveConfig.searchMode() != null
+                ? effectiveConfig.searchMode() : properties.defaultSearchMode();
+        boolean useReranker = effectiveConfig.useReranker() != null
+                ? effectiveConfig.useReranker() : properties.defaultUseReranker();
         Double minRerankScore = effectiveConfig.minRerankScore() != null
                 ? effectiveConfig.minRerankScore() : properties.minRerankScore();
         Double minBm25Score = effectiveConfig.minBm25Score() != null
                 ? effectiveConfig.minBm25Score() : properties.minBm25Score();
-        LOG.debug("Retrieval: mode={}, topK={}, userId present={}, minRerankScore={}, minBm25Score={}",
-                mode, topK, filter.hasUserId(), minRerankScore, minBm25Score);
+        LOG.debug("Retrieval: mode={}, topK={}, useReranker={}, userId present={}, minRerankScore={}, "
+                + "minBm25Score={}", mode, topK, useReranker, filter.hasUserId(), minRerankScore, minBm25Score);
 
         if (mode.requiresQuestion() && !StringUtils.hasText(question)) {
             throw new InvalidSearchFilterException("question must not be blank unless searchMode is FILTER");
@@ -102,9 +105,9 @@ public class RetrievalService {
                 yield filterRetriever.retrieve(filter, topK);
             }
             case VECTOR -> rerankOrTruncate(question, retrieveFromVectorStore(question, filter, topK),
-                    topK, effectiveConfig.useReranker(), minRerankScore);
+                    topK, useReranker, minRerankScore);
             case BM25 -> rerankOrTruncate(question, retrieveBm25(question, filter, topK, minBm25Score),
-                    topK, effectiveConfig.useReranker(), minRerankScore);
+                    topK, useReranker, minRerankScore);
             case HYBRID -> {
                 List<Document> combined = unionDeduplicate(
                         retrieveFromVectorStore(question, filter, topK),
