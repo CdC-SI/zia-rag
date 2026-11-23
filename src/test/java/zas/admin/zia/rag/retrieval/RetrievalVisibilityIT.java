@@ -32,10 +32,12 @@ import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -164,6 +166,20 @@ class RetrievalVisibilityIT {
                   "config": { "searchMode": "FILTER", "metadataFilters": { "user_uuid": ["u-2"] } } }
                 """)
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void sources_listOnlyThePublicDocumentSources() throws Exception {
+        jdbcTemplate.update("INSERT INTO vector_store (id, content, metadata, embedding) "
+                + "VALUES ('00000000-0000-0000-0000-000000000005'::uuid, 'perso', "
+                + "'{\"source\": \"user_pdf_upload\", \"user_uuid\": \"u-1\"}'::json, '[1,0,0]'::vector)");
+        jdbcTemplate.update("INSERT INTO vector_store (id, content, metadata, embedding) "
+                + "VALUES ('00000000-0000-0000-0000-000000000006'::uuid, 'faq', "
+                + "'{\"source\": \"faq_bsv\"}'::json, '[1,0,0]'::vector)");
+
+        mockMvc.perform(get("/api/v1/retrieval/sources").header(BLUE_HEADER, "Bearer " + blueToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", contains("faq_bsv", "it")));
     }
 
     @Test

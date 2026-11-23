@@ -16,6 +16,9 @@ API REST sous `/zia-rag/api/v1/retrieval` : voir `README.md` (endpoints, modes `
 - Validation de référence : `mvn clean verify` (CI GitHub Actions).
 - Un seul test : `mvn -o test -Dtest=NomDeLaClasseTest`.
 - Tests d'intégration `*IT` (Testcontainers, pgvector) : exécutés par `verify` (failsafe), ignorés sans Docker.
+- Couverture JaCoCo (unitaires + IT) vérifiée par `verify` : seuils `jacoco.minimum.line` / `jacoco.minimum.branch`
+  du `pom.xml` (cliquet : ne jamais les baisser, les remonter quand la couverture progresse). Rapport :
+  `target/site/jacoco/index.html`. Mockito est chargé comme agent Java (surefire/failsafe `argLine`).
 - Profil Maven `internal` : ajoute `zas-common-security-starter` (validation du jeton bleu + groupes RHDS).
   Utilisé par le `Jenkinsfile` (`mvn -B clean verify -Pinternal`), indisponible sur GitHub.
   Sans ce profil, toutes les requêtes sont autorisées (dev local, CI GitHub).

@@ -14,6 +14,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -72,6 +74,35 @@ class RemoteRerankerTest {
     @Test
     void noDocuments_noCall() {
         assertThat(reranker.rerank("q", List.of(), 2)).isEmpty();
+        assertThat(reranker.rerank("q", null, 2)).isEmpty();
         server.verify();
+    }
+
+    @Test
+    void outOfRangeIndexes_areIgnored_andTheQueryAndDocumentsAreWrappedInThePromptTemplate() {
+        server.expect(requestTo("http://reranker/score"))
+                .andExpect(content().string(containsString("<Query>: quelle cotisation")))
+                .andExpect(content().string(containsString("<Document>: A")))
+                .andExpect(content().string(containsString("\"truncate_prompt_tokens\":1024")))
+                .andRespond(withSuccess("""
+                        { "data": [
+                            { "index": -1, "score": 0.99 },
+                            { "index": 7, "score": 0.98 },
+                            { "index": 1, "score": 0.4 } ] }
+                        """, MediaType.APPLICATION_JSON));
+
+        List<Document> docs = List.of(Document.builder().id("a").text("A").build(),
+                Document.builder().id("b").text("B").build());
+        List<Document> result = reranker.rerank("quelle cotisation", docs, 5);
+
+        assertThat(result).extracting(Document::getId).containsExactly("b");
+    }
+
+    @Test
+    void missingDataField_isAFailure() {
+        server.expect(requestTo("http://reranker/score"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> reranker.rerank("q", documents(), 2)).isInstanceOf(IllegalStateException.class);
     }
 }
